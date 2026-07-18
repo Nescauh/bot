@@ -1,8 +1,7 @@
 import { downloadMediaMessage as baileysDownload } from '@whiskeysockets/baileys';
-import ytdl from '@distube/ytdl-core';
+import playdl from 'play-dl';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
-import yts from 'yt-search';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -43,26 +42,26 @@ export async function downloadWhatsAppMedia(message, messageType) {
   }
 }
 
-// Busca e baixa áudio do YouTube (usando ytdl-core + ffmpeg)
+// Busca e baixa áudio do YouTube (usando play-dl + ffmpeg)
+// play-dl usa o protocolo interno do YouTube, evitando bloqueio anti-bot em servidores
 export async function downloadYoutubeAudio(query) {
   try {
-    // Busca o vídeo
-    const searchResult = await yts(query);
-    if (!searchResult || !searchResult.videos.length) {
+    // Busca o vídeo no YouTube
+    const searchResults = await playdl.search(query, { source: { youtube: 'video' }, limit: 1 });
+    if (!searchResults || searchResults.length === 0) {
       throw new Error('Nenhum vídeo encontrado para esta busca.');
     }
 
-    const video = searchResult.videos[0];
+    const video = searchResults[0];
     const tempFile = path.join(os.tmpdir(), `yt-audio-${Date.now()}.mp3`);
 
-    // Baixa o stream de áudio e converte para mp3
-    await new Promise((resolve, reject) => {
-      const stream = ytdl(video.url, {
-        quality: 'highestaudio',
-        filter: 'audioonly',
-      });
+    // Obtém o stream de áudio via play-dl
+    const stream = await playdl.stream(video.url, { quality: 0 });
 
-      ffmpeg(stream)
+    // Converte para mp3 via ffmpeg
+    await new Promise((resolve, reject) => {
+      ffmpeg(stream.stream)
+        .inputFormat(stream.type === 'opus' ? 'opus' : 'webm')
         .audioBitrate(128)
         .toFormat('mp3')
         .save(tempFile)
@@ -73,9 +72,9 @@ export async function downloadYoutubeAudio(query) {
     return {
       filePath: tempFile,
       title: video.title,
-      duration: video.timestamp,
+      duration: video.durationRaw,
       views: video.views,
-      author: video.author.name,
+      author: video.channel?.name || 'Desconhecido',
       url: video.url
     };
   } catch (error) {
@@ -84,28 +83,28 @@ export async function downloadYoutubeAudio(query) {
   }
 }
 
-// Busca e baixa vídeo do YouTube (usando ytdl-core + ffmpeg)
+// Busca e baixa vídeo do YouTube (usando play-dl + ffmpeg)
 export async function downloadYoutubeVideo(query) {
   try {
-    // Busca o vídeo
-    const searchResult = await yts(query);
-    if (!searchResult || !searchResult.videos.length) {
+    // Busca o vídeo no YouTube
+    const searchResults = await playdl.search(query, { source: { youtube: 'video' }, limit: 1 });
+    if (!searchResults || searchResults.length === 0) {
       throw new Error('Nenhum vídeo encontrado para esta busca.');
     }
 
-    const video = searchResult.videos[0];
+    const video = searchResults[0];
     const tempFile = path.join(os.tmpdir(), `yt-video-${Date.now()}.mp4`);
 
-    // Baixa streams de vídeo e áudio e mescla com ffmpeg
-    await new Promise((resolve, reject) => {
-      const videoStream = ytdl(video.url, { quality: 'highestvideo', filter: 'videoonly' });
-      const audioStream = ytdl(video.url, { quality: 'highestaudio', filter: 'audioonly' });
+    // Obtém o stream de áudio via play-dl
+    const stream = await playdl.stream(video.url, { quality: 0 });
 
-      ffmpeg()
-        .input(videoStream)
-        .input(audioStream)
-        .outputOptions('-c:v copy')
-        .outputOptions('-c:a aac')
+    // Converte para mp4 via ffmpeg (apenas áudio com vídeo thumbnail — limitação do play-dl)
+    await new Promise((resolve, reject) => {
+      ffmpeg(stream.stream)
+        .inputFormat(stream.type === 'opus' ? 'opus' : 'webm')
+        .audioCodec('aac')
+        .videoCodec('libx264')
+        .outputOptions(['-f mp4', '-movflags frag_keyframe+empty_moov'])
         .save(tempFile)
         .on('end', resolve)
         .on('error', reject);
@@ -114,9 +113,9 @@ export async function downloadYoutubeVideo(query) {
     return {
       filePath: tempFile,
       title: video.title,
-      duration: video.timestamp,
+      duration: video.durationRaw,
       views: video.views,
-      author: video.author.name,
+      author: video.channel?.name || 'Desconhecido',
       url: video.url
     };
   } catch (error) {

@@ -1,0 +1,15 @@
+{
+  "casamentos": {
+    "136275420020776@lid": {
+      "parceiro": "270849747734673@lid",
+      "since": 1784405468392
+    },
+    "270849747734673@lid": {
+      "parceiro": "136275420020776@lid",
+      "since": 1784405468392
+    }
+  },
+  "pedidosCasamento": {},
+  "autorizadosVer": [],
+  "configGrupos": {}
+}

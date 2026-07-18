@@ -1,10 +1,14 @@
 import { downloadMediaMessage as baileysDownload } from '@whiskeysockets/baileys';
-import youtubedl from 'youtube-dl-exec';
+import ytdl from '@distube/ytdl-core';
+import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
 import yts from 'yt-search';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+
+// Configura o ffmpeg com o binário estático
+ffmpeg.setFfmpegPath(ffmpegPath);
 
 // Formata segundos em "Xh Ym Zs"
 export function formatUptime(seconds) {
@@ -39,28 +43,33 @@ export async function downloadWhatsAppMedia(message, messageType) {
   }
 }
 
-// Busca e baixa áudio do YouTube
+// Busca e baixa áudio do YouTube (usando ytdl-core + ffmpeg)
 export async function downloadYoutubeAudio(query) {
   try {
+    // Busca o vídeo
     const searchResult = await yts(query);
     if (!searchResult || !searchResult.videos.length) {
       throw new Error('Nenhum vídeo encontrado para esta busca.');
     }
-    
+
     const video = searchResult.videos[0];
-    const tempFileBase = path.join(os.tmpdir(), `yt-audio-${Date.now()}`);
-    const tempFile = `${tempFileBase}.mp3`;
-    
-    await youtubedl(video.url, {
-      extractAudio: true,
-      audioFormat: 'mp3',
-      audioQuality: '0',
-      output: `${tempFileBase}.%(ext)s`,
-      ffmpegLocation: `"${ffmpegPath}"`,
-      noPlaylist: true,
-      noWarnings: true
+    const tempFile = path.join(os.tmpdir(), `yt-audio-${Date.now()}.mp3`);
+
+    // Baixa o stream de áudio e converte para mp3
+    await new Promise((resolve, reject) => {
+      const stream = ytdl(video.url, {
+        quality: 'highestaudio',
+        filter: 'audioonly',
+      });
+
+      ffmpeg(stream)
+        .audioBitrate(128)
+        .toFormat('mp3')
+        .save(tempFile)
+        .on('end', resolve)
+        .on('error', reject);
     });
-    
+
     return {
       filePath: tempFile,
       title: video.title,
@@ -75,26 +84,33 @@ export async function downloadYoutubeAudio(query) {
   }
 }
 
-// Busca e baixa vídeo do YouTube
+// Busca e baixa vídeo do YouTube (usando ytdl-core + ffmpeg)
 export async function downloadYoutubeVideo(query) {
   try {
+    // Busca o vídeo
     const searchResult = await yts(query);
     if (!searchResult || !searchResult.videos.length) {
       throw new Error('Nenhum vídeo encontrado para esta busca.');
     }
-    
+
     const video = searchResult.videos[0];
-    const tempFileBase = path.join(os.tmpdir(), `yt-video-${Date.now()}`);
-    const tempFile = `${tempFileBase}.mp4`;
-    
-    await youtubedl(video.url, {
-      format: 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-      output: `${tempFileBase}.%(ext)s`,
-      ffmpegLocation: `"${ffmpegPath}"`,
-      noPlaylist: true,
-      noWarnings: true
+    const tempFile = path.join(os.tmpdir(), `yt-video-${Date.now()}.mp4`);
+
+    // Baixa streams de vídeo e áudio e mescla com ffmpeg
+    await new Promise((resolve, reject) => {
+      const videoStream = ytdl(video.url, { quality: 'highestvideo', filter: 'videoonly' });
+      const audioStream = ytdl(video.url, { quality: 'highestaudio', filter: 'audioonly' });
+
+      ffmpeg()
+        .input(videoStream)
+        .input(audioStream)
+        .outputOptions('-c:v copy')
+        .outputOptions('-c:a aac')
+        .save(tempFile)
+        .on('end', resolve)
+        .on('error', reject);
     });
-    
+
     return {
       filePath: tempFile,
       title: video.title,

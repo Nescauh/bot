@@ -57,8 +57,12 @@ function runYtDlpExecFile(args) {
 
     execFile(ytDlpPath, args, (error, stdout, stderr) => {
       if (error) {
-        console.error('[yt-dlp error]', stderr || error.message);
-        return reject(new Error(stderr || error.message));
+        const errStr = stderr || error.message;
+        console.error('[yt-dlp error]', errStr);
+        if (errStr.includes("python3': No such file or directory") || errStr.includes("python3: not found")) {
+          return reject(new Error('Python 3 não está instalado no ambiente do servidor.'));
+        }
+        return reject(new Error(errStr));
       }
       resolve(stdout);
     });

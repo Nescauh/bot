@@ -41,28 +41,65 @@ export async function downloadWhatsAppMedia(message, messageType) {
   }
 }
 
-// Executa o yt-dlp diretamente via child_process.execFile para evitar bugs do shell (cmd.exe no Windows)
-function runYtDlp(args) {
+// Executa o binário do yt-dlp com garantias de permissão e suporte a fallback de cookies
+function runYtDlpExecFile(args) {
   return new Promise((resolve, reject) => {
-    const ytDlpPath = ytdl.constants.YOUTUBE_DL_PATH;
+    let ytDlpPath = ytdl.constants.YOUTUBE_DL_PATH;
+    
+    // Verifica se o binário local existe; se não existir, tenta o yt-dlp do sistema (PATH)
+    if (!fs.existsSync(ytDlpPath)) {
+      ytDlpPath = 'yt-dlp';
+    } else if (process.platform !== 'win32') {
+      try {
+        fs.chmodSync(ytDlpPath, '755');
+      } catch (_) {}
+    }
+
     execFile(ytDlpPath, args, (error, stdout, stderr) => {
       if (error) {
         console.error('[yt-dlp error]', stderr || error.message);
-        return reject(error);
+        return reject(new Error(stderr || error.message));
       }
       resolve(stdout);
     });
   });
 }
 
-// Monta os argumentos base para o yt-dlp
-function buildBaseArgs() {
-  const args = ['--no-playlist', '--ffmpeg-location', ffmpegPath];
-  if (fs.existsSync(COOKIES_PATH)) {
-    args.push('--cookies', COOKIES_PATH);
-    console.log('[yt-dlp] Usando cookies.txt do YouTube para autenticação.');
+// Monta os argumentos base
+function buildBaseArgs(withCookies = true) {
+  const args = ['--no-playlist'];
+  
+  if (ffmpegPath && fs.existsSync(ffmpegPath)) {
+    args.push('--ffmpeg-location', ffmpegPath);
   }
+  
+  if (withCookies && fs.existsSync(COOKIES_PATH)) {
+    args.push('--cookies', COOKIES_PATH);
+    console.log('[yt-dlp] Usando cookies.txt do YouTube.');
+  }
+
   return args;
+}
+
+// Executa o download com retentativa (primeiro com cookies, depois sem cookies caso os cookies tenham expirado)
+async function downloadWithYtDlp(url, specificArgs) {
+  try {
+    const argsWithCookies = [url, ...buildBaseArgs(true), ...specificArgs];
+    return await runYtDlpExecFile(argsWithCookies);
+  } catch (firstError) {
+    console.warn('⚠️ Falha ao baixar com cookies (podem estar expirados). Tentando sem cookies...', firstError.message);
+    try {
+      const argsWithoutCookies = [url, ...buildBaseArgs(false), ...specificArgs];
+      return await runYtDlpExecFile(argsWithoutCookies);
+    } catch (secondError) {
+      console.warn('⚠️ Falha na execução direta do binário. Tentando via wrapper youtube-dl-exec...', secondError.message);
+      // Fallback final: tenta via pacote youtube-dl-exec padrão
+      return await ytdl(url, {
+        noPlaylist: true,
+        ...(ffmpegPath && fs.existsSync(ffmpegPath) ? { ffmpegLocation: ffmpegPath } : {}),
+      });
+    }
+  }
 }
 
 // Busca e baixa áudio do YouTube
@@ -72,21 +109,19 @@ export async function downloadYoutubeAudio(query) {
     const video = searchResult.videos ? searchResult.videos[0] : searchResult;
     
     if (!video || !video.url) {
-      throw new Error('Nenhum vídeo encontrado para a busca.');
+      throw new Error('Nenhum vídeo encontrado para esta busca.');
     }
 
     const tmpFile = path.join(os.tmpdir(), `yt-audio-${Date.now()}.mp3`);
 
-    const args = [
-      video.url,
-      ...buildBaseArgs(),
+    const specificArgs = [
       '--extract-audio',
       '--audio-format', 'mp3',
       '--audio-quality', '0',
       '--output', tmpFile
     ];
 
-    await runYtDlp(args);
+    await downloadWithYtDlp(video.url, specificArgs);
 
     return {
       filePath: tmpFile,
@@ -109,20 +144,18 @@ export async function downloadYoutubeVideo(query) {
     const video = searchResult.videos ? searchResult.videos[0] : searchResult;
     
     if (!video || !video.url) {
-      throw new Error('Nenhum vídeo encontrado para a busca.');
+      throw new Error('Nenhum vídeo encontrado para esta busca.');
     }
 
     const tmpFile = path.join(os.tmpdir(), `yt-video-${Date.now()}.mp4`);
 
-    const args = [
-      video.url,
-      ...buildBaseArgs(),
+    const specificArgs = [
       '--format', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720]/best',
       '--merge-output-format', 'mp4',
       '--output', tmpFile
     ];
 
-    await runYtDlp(args);
+    await downloadWithYtDlp(video.url, specificArgs);
 
     return {
       filePath: tmpFile,
@@ -137,4 +170,5 @@ export async function downloadYoutubeVideo(query) {
     throw error;
   }
 }
+
 

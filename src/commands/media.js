@@ -246,7 +246,8 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
         fs.unlinkSync(music.filePath);
       } catch (error) {
         console.error('Erro ao baixar música:', error);
-        return reply('⚠️ Erro ao buscar/baixar a música. Verifique se o termo de busca é válido.');
+        const detail = error?.message ? ` (${error.message.slice(0, 100)})` : '';
+        return reply(`⚠️ Erro ao buscar/baixar a música${detail}. Tente novamente em instantes.`);
       }
       break;
     }
@@ -275,7 +276,8 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
         fs.unlinkSync(video.filePath);
       } catch (error) {
         console.error('Erro ao baixar vídeo:', error);
-        return reply('⚠️ Erro ao buscar/baixar o vídeo. O YouTube pode estar bloqueando a requisição ou o vídeo é muito grande.');
+        const detail = error?.message ? ` (${error.message.slice(0, 100)})` : '';
+        return reply(`⚠️ Erro ao buscar/baixar o vídeo${detail}. O vídeo pode ser muito grande ou indisponível.`);
       }
       break;
     }

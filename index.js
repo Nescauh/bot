@@ -13,7 +13,7 @@ global.botStartTime = Date.now();
 async function startBot() {
   // Carrega banco de dados local
   loadDatabase();
-  initSqlite();
+  await initSqlite();
   console.log('📦 Bancos de dados carregados com sucesso!');
 
   // Define diretório de sessão para salvar as credenciais de autenticação

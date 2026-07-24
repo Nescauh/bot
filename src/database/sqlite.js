@@ -1,4 +1,4 @@
-import sqlite3 from 'sqlite3';
+import initSqlJs from 'sql.js';
 import path from 'path';
 import fs from 'fs';
 
@@ -8,7 +8,6 @@ const FALLBACK_JSON_PATH = path.resolve('bot_data.json');
 let dbInstance = null;
 let memoryStore = null;
 
-// Tenta inicializar o sqlite3 ou carrega o armazenamento em JSON
 function getStore() {
   if (memoryStore) return memoryStore;
 
@@ -38,62 +37,68 @@ function saveStore() {
   }
 }
 
-// Inicializa o SQLite
-export function initSqlite() {
+function saveSqliteFile() {
+  if (!dbInstance) return;
   try {
-    dbInstance = new sqlite3.Database(DB_PATH, (err) => {
-      if (err) {
-        console.warn('⚠️ SQLite nativo não disponível, utilizando banco local compatível.', err.message);
-        dbInstance = null;
-      } else {
-        console.log('🗄️ Banco de dados SQLite ativado com sucesso!');
-        dbInstance.serialize(() => {
-          dbInstance.run(`
-            CREATE TABLE IF NOT EXISTS users (
-              jid TEXT PRIMARY KEY,
-              wallet INTEGER DEFAULT 0,
-              bank INTEGER DEFAULT 0,
-              xp INTEGER DEFAULT 0,
-              level INTEGER DEFAULT 1,
-              last_daily INTEGER DEFAULT 0,
-              last_work INTEGER DEFAULT 0,
-              inventory TEXT DEFAULT '[]'
-            );
-          `);
-
-          dbInstance.run(`
-            CREATE TABLE IF NOT EXISTS warns (
-              group_jid TEXT,
-              user_jid TEXT,
-              count INTEGER DEFAULT 0,
-              PRIMARY KEY (group_jid, user_jid)
-            );
-          `);
-
-          dbInstance.run(`
-            CREATE TABLE IF NOT EXISTS group_configs (
-              group_jid TEXT PRIMARY KEY,
-              antilink INTEGER DEFAULT 0,
-              antispam INTEGER DEFAULT 0,
-              welcome INTEGER DEFAULT 0,
-              rules TEXT DEFAULT ''
-            );
-          `);
-
-          dbInstance.run(`
-            CREATE TABLE IF NOT EXISTS reminders (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              user_jid TEXT,
-              chat_jid TEXT,
-              target_time INTEGER,
-              message TEXT
-            );
-          `);
-        });
-      }
-    });
+    const data = dbInstance.export();
+    const buffer = Buffer.from(data);
+    fs.writeFileSync(DB_PATH, buffer);
   } catch (err) {
-    console.warn('⚠️ Inicializando armazenamento JSON de fallback para o SQLite.');
+    console.error('Erro ao salvar arquivo SQLite:', err);
+  }
+}
+
+// Inicializa o SQLite via WebAssembly (sql.js - 100% puro JS sem dependência de C++/GLIBC)
+export async function initSqlite() {
+  try {
+    const SQL = await initSqlJs();
+    if (fs.existsSync(DB_PATH)) {
+      const filebuffer = fs.readFileSync(DB_PATH);
+      dbInstance = new SQL.Database(filebuffer);
+    } else {
+      dbInstance = new SQL.Database();
+    }
+
+    dbInstance.run(`
+      CREATE TABLE IF NOT EXISTS users (
+        jid TEXT PRIMARY KEY,
+        wallet INTEGER DEFAULT 0,
+        bank INTEGER DEFAULT 0,
+        xp INTEGER DEFAULT 0,
+        level INTEGER DEFAULT 1,
+        last_daily INTEGER DEFAULT 0,
+        last_work INTEGER DEFAULT 0,
+        inventory TEXT DEFAULT '[]'
+      );
+
+      CREATE TABLE IF NOT EXISTS warns (
+        group_jid TEXT,
+        user_jid TEXT,
+        count INTEGER DEFAULT 0,
+        PRIMARY KEY (group_jid, user_jid)
+      );
+
+      CREATE TABLE IF NOT EXISTS group_configs (
+        group_jid TEXT PRIMARY KEY,
+        antilink INTEGER DEFAULT 0,
+        antispam INTEGER DEFAULT 0,
+        welcome INTEGER DEFAULT 0,
+        rules TEXT DEFAULT ''
+      );
+
+      CREATE TABLE IF NOT EXISTS reminders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_jid TEXT,
+        chat_jid TEXT,
+        target_time INTEGER,
+        message TEXT
+      );
+    `);
+
+    saveSqliteFile();
+    console.log('🗄️ Banco de dados SQLite WebAssembly (sql.js) ativado com sucesso!');
+  } catch (err) {
+    console.warn('⚠️ Falha ao carregar WebAssembly do SQLite. Utilizando armazenamento JSON local.', err.message);
     dbInstance = null;
   }
 }
@@ -116,10 +121,13 @@ export function getUser(jid) {
     saveStore();
 
     if (dbInstance) {
-      dbInstance.run(
-        'INSERT OR IGNORE INTO users (jid, wallet, bank, xp, level, last_daily, last_work, inventory) VALUES (?, 0, 0, 0, 1, 0, 0, "[]")',
-        [jid]
-      );
+      try {
+        dbInstance.run(
+          'INSERT OR IGNORE INTO users (jid, wallet, bank, xp, level, last_daily, last_work, inventory) VALUES (?, 0, 0, 0, 1, 0, 0, "[]")',
+          [jid]
+        );
+        saveSqliteFile();
+      } catch (_) {}
     }
   }
   return store.users[jid];
@@ -133,14 +141,17 @@ export function updateUser(jid, updates) {
   saveStore();
 
   if (dbInstance) {
-    const fields = [];
-    const values = [];
-    for (const [key, val] of Object.entries(updates)) {
-      fields.push(`${key} = ?`);
-      values.push(typeof val === 'object' ? JSON.stringify(val) : val);
-    }
-    values.push(jid);
-    dbInstance.run(`UPDATE users SET ${fields.join(', ')} WHERE jid = ?`, values);
+    try {
+      const fields = [];
+      const values = [];
+      for (const [key, val] of Object.entries(updates)) {
+        fields.push(`${key} = ?`);
+        values.push(typeof val === 'object' ? JSON.stringify(val) : val);
+      }
+      values.push(jid);
+      dbInstance.run(`UPDATE users SET ${fields.join(', ')} WHERE jid = ?`, values);
+      saveSqliteFile();
+    } catch (_) {}
   }
 }
 
@@ -175,7 +186,10 @@ export function addWarn(groupJid, userJid) {
   saveStore();
 
   if (dbInstance) {
-    dbInstance.run('INSERT OR REPLACE INTO warns (group_jid, user_jid, count) VALUES (?, ?, ?)', [groupJid, userJid, next]);
+    try {
+      dbInstance.run('INSERT OR REPLACE INTO warns (group_jid, user_jid, count) VALUES (?, ?, ?)', [groupJid, userJid, next]);
+      saveSqliteFile();
+    } catch (_) {}
   }
   return next;
 }
@@ -187,7 +201,10 @@ export function resetWarns(groupJid, userJid) {
   saveStore();
 
   if (dbInstance) {
-    dbInstance.run('DELETE FROM warns WHERE group_jid = ? AND user_jid = ?', [groupJid, userJid]);
+    try {
+      dbInstance.run('DELETE FROM warns WHERE group_jid = ? AND user_jid = ?', [groupJid, userJid]);
+      saveSqliteFile();
+    } catch (_) {}
   }
 }
 
@@ -206,7 +223,10 @@ export function getGroupConfig(groupJid) {
     saveStore();
 
     if (dbInstance) {
-      dbInstance.run('INSERT OR IGNORE INTO group_configs (group_jid, antilink, antispam, welcome, rules) VALUES (?, 0, 0, 0, "")', [groupJid]);
+      try {
+        dbInstance.run('INSERT OR IGNORE INTO group_configs (group_jid, antilink, antispam, welcome, rules) VALUES (?, 0, 0, 0, "")', [groupJid]);
+        saveSqliteFile();
+      } catch (_) {}
     }
   }
   return store.group_configs[groupJid];
@@ -218,14 +238,17 @@ export function updateGroupConfig(groupJid, updates) {
   saveStore();
 
   if (dbInstance) {
-    const fields = [];
-    const values = [];
-    for (const [key, val] of Object.entries(updates)) {
-      fields.push(`${key} = ?`);
-      values.push(val);
-    }
-    values.push(groupJid);
-    dbInstance.run(`UPDATE group_configs SET ${fields.join(', ')} WHERE group_jid = ?`, values);
+    try {
+      const fields = [];
+      const values = [];
+      for (const [key, val] of Object.entries(updates)) {
+        fields.push(`${key} = ?`);
+        values.push(val);
+      }
+      values.push(groupJid);
+      dbInstance.run(`UPDATE group_configs SET ${fields.join(', ')} WHERE group_jid = ?`, values);
+      saveSqliteFile();
+    } catch (_) {}
   }
 }
 
@@ -244,7 +267,10 @@ export function addReminder(userJid, chatJid, targetTime, message) {
   saveStore();
 
   if (dbInstance) {
-    dbInstance.run('INSERT INTO reminders (user_jid, chat_jid, target_time, message) VALUES (?, ?, ?, ?)', [userJid, chatJid, targetTime, message]);
+    try {
+      dbInstance.run('INSERT INTO reminders (user_jid, chat_jid, target_time, message) VALUES (?, ?, ?, ?)', [userJid, chatJid, targetTime, message]);
+      saveSqliteFile();
+    } catch (_) {}
   }
   return reminder;
 }
@@ -261,7 +287,10 @@ export function deleteReminder(id) {
   saveStore();
 
   if (dbInstance) {
-    dbInstance.run('DELETE FROM reminders WHERE id = ?', [id]);
+    try {
+      dbInstance.run('DELETE FROM reminders WHERE id = ?', [id]);
+      saveSqliteFile();
+    } catch (_) {}
   }
 }
 

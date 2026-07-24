@@ -1,4 +1,6 @@
 import axios from 'axios';
+import dotenv from 'dotenv';
+dotenv.config();
 
 export async function handleExplicarCommand(sock, msg, args) {
   const from = msg.key.remoteJid;
@@ -10,14 +12,27 @@ export async function handleExplicarCommand(sock, msg, args) {
 
   await sock.sendMessage(from, { text: '💡 Preparando explicação...' }, { quoted: msg });
 
+  const prompt = `Explique de maneira simples, didática e completa em português do Brasil o seguinte tema/conceito: ${concept}`;
+  const apiKey = process.env.AI_API_KEY;
+
   try {
-    const prompt = `Explique de maneira simples, didática e completa em português do Brasil o seguinte tema/conceito: ${concept}`;
-    const res = await axios.get(`https://text.pollinations.ai/${encodeURIComponent(prompt)}?model=openai`);
-    const explanation = res.data || 'Não foi possível gerar a explicação.';
+    const headers = apiKey ? {
+      'Authorization': `Bearer ${apiKey}`,
+      'x-api-key': apiKey
+    } : {};
+
+    const res = await axios.get(`https://text.pollinations.ai/${encodeURIComponent(prompt)}?model=openai`, { headers });
+    const explanation = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
 
     return sock.sendMessage(from, { text: `💡 *Explicação:*\n\n${explanation}` }, { quoted: msg });
   } catch (err) {
     console.error('Erro no comando /explicar:', err.message);
-    return sock.sendMessage(from, { text: '⚠️ Ocorreu um erro ao buscar a explicação.' }, { quoted: msg });
+    try {
+      const res = await axios.get(`https://text.pollinations.ai/${encodeURIComponent(prompt)}?model=openai`);
+      const explanation = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+      return sock.sendMessage(from, { text: `💡 *Explicação:*\n\n${explanation}` }, { quoted: msg });
+    } catch (_) {
+      return sock.sendMessage(from, { text: '⚠️ Ocorreu um erro ao buscar a explicação.' }, { quoted: msg });
+    }
   }
 }

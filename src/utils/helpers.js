@@ -1,19 +1,17 @@
 import { downloadMediaMessage as baileysDownload } from '@whiskeysockets/baileys';
-import { spawn } from 'child_process';
-import ffmpeg from 'fluent-ffmpeg';
+import ytdl from 'youtube-dl-exec';
+import { execFile } from 'child_process';
 import ffmpegPath from 'ffmpeg-static';
+import yts from 'yt-search';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 
-// Caminho base do projeto (para encontrar os cookies)
+// Caminho base para encontrar o cookies.txt na raiz do projeto
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const COOKIES_PATH = path.resolve(__dirname, '../../cookies.txt');
-
-// Configura o ffmpeg com o binário estático
-ffmpeg.setFfmpegPath(ffmpegPath);
 
 // Formata segundos em "Xh Ym Zs"
 export function formatUptime(seconds) {
@@ -26,19 +24,14 @@ export function formatUptime(seconds) {
 // Baixa uma mídia de uma mensagem do WhatsApp e retorna o caminho do arquivo temporário
 export async function downloadWhatsAppMedia(message, messageType) {
   try {
-    const buffer = await baileysDownload(
-      message,
-      'buffer',
-      {}
-    );
-    
-    // Determinar extensão básica
+    const buffer = await baileysDownload(message, 'buffer', {});
+
     let ext = 'bin';
     if (messageType === 'image') ext = 'jpg';
     else if (messageType === 'video') ext = 'mp4';
     else if (messageType === 'audio') ext = 'mp3';
     else if (messageType === 'sticker') ext = 'webp';
-    
+
     const tempFile = path.join(os.tmpdir(), `wa-media-${Date.now()}.${ext}`);
     fs.writeFileSync(tempFile, buffer);
     return tempFile;
@@ -48,92 +41,61 @@ export async function downloadWhatsAppMedia(message, messageType) {
   }
 }
 
-// Busca a URL do YouTube a partir de um nome ou URL
-async function buscarUrlYoutube(query) {
-  // Se já é uma URL do YouTube, retorna direto
-  if (query.startsWith('http') && (query.includes('youtube.com') || query.includes('youtu.be'))) {
-    return query;
-  }
-
-  // Busca pelo nome usando yt-dlp
+// Executa o yt-dlp diretamente via child_process.execFile para evitar bugs do shell (cmd.exe no Windows)
+function runYtDlp(args) {
   return new Promise((resolve, reject) => {
-    const args = [
-      `ytsearch1:${query}`,
-      '--get-id',
-      '--no-playlist'
-    ];
-
-    // Usa cookies se o arquivo existir
-    if (fs.existsSync(COOKIES_PATH)) {
-      args.unshift('--cookies', COOKIES_PATH);
-    }
-
-    const proc = spawn('yt-dlp', args);
-    let id = '';
-
-    proc.stdout.on('data', (data) => { id += data.toString().trim(); });
-    proc.stderr.on('data', (data) => { console.error(`[yt-dlp busca] ${data}`); });
-    proc.on('close', (code) => {
-      if (code === 0 && id) {
-        resolve(`https://www.youtube.com/watch?v=${id}`);
-      } else {
-        reject(new Error('Nenhum vídeo encontrado para esta busca.'));
+    const ytDlpPath = ytdl.constants.YOUTUBE_DL_PATH;
+    execFile(ytDlpPath, args, (error, stdout, stderr) => {
+      if (error) {
+        console.error('[yt-dlp error]', stderr || error.message);
+        return reject(error);
       }
+      resolve(stdout);
     });
-    proc.on('error', () => reject(new Error('yt-dlp não encontrado. Instale com: pip install yt-dlp')));
   });
 }
 
-// Baixa áudio via yt-dlp com cookies para evitar bloqueio anti-bot
-async function ytdlpDownload(url, args) {
-  return new Promise((resolve, reject) => {
-    const finalArgs = [...args];
-
-    // Usa cookies se o arquivo existir
-    if (fs.existsSync(COOKIES_PATH)) {
-      finalArgs.unshift('--cookies', COOKIES_PATH);
-    }
-
-    const proc = spawn('yt-dlp', finalArgs);
-    proc.stderr.on('data', (data) => { console.error(`[yt-dlp] ${data}`); });
-    proc.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`yt-dlp finalizou com erro (código ${code})`));
-    });
-    proc.on('error', () => reject(new Error('yt-dlp não encontrado. Instale com: pip install yt-dlp')));
-  });
+// Monta os argumentos base para o yt-dlp
+function buildBaseArgs() {
+  const args = ['--no-playlist', '--ffmpeg-location', ffmpegPath];
+  if (fs.existsSync(COOKIES_PATH)) {
+    args.push('--cookies', COOKIES_PATH);
+    console.log('[yt-dlp] Usando cookies.txt do YouTube para autenticação.');
+  }
+  return args;
 }
 
 // Busca e baixa áudio do YouTube
 export async function downloadYoutubeAudio(query) {
   try {
-    const url = await buscarUrlYoutube(query);
+    const searchResult = await yts(query);
+    const video = searchResult.videos ? searchResult.videos[0] : searchResult;
+    
+    if (!video || !video.url) {
+      throw new Error('Nenhum vídeo encontrado para a busca.');
+    }
+
     const tmpFile = path.join(os.tmpdir(), `yt-audio-${Date.now()}.mp3`);
 
-    await ytdlpDownload(url, [
-      '-x',
+    const args = [
+      video.url,
+      ...buildBaseArgs(),
+      '--extract-audio',
       '--audio-format', 'mp3',
       '--audio-quality', '0',
-      '-o', tmpFile,
-      url
-    ]);
+      '--output', tmpFile
+    ];
 
-    // Pega título do vídeo
-    let title = 'audio';
-    try {
-      const info = await new Promise((resolve, reject) => {
-        const args = ['--get-title', '--no-playlist'];
-        if (fs.existsSync(COOKIES_PATH)) args.unshift('--cookies', COOKIES_PATH);
-        const proc = spawn('yt-dlp', [...args, url]);
-        let out = '';
-        proc.stdout.on('data', (d) => { out += d.toString(); });
-        proc.on('close', () => resolve(out.trim()));
-        proc.on('error', reject);
-      });
-      title = info || title;
-    } catch (_) {}
+    await runYtDlp(args);
 
-    return { filePath: tmpFile, title, duration: '', views: 0, author: '', url };
+    return {
+      filePath: tmpFile,
+      title: video.title || query,
+      duration: video.timestamp || '',
+      views: video.views || 0,
+      author: video.author?.name || '',
+      url: video.url
+    };
   } catch (error) {
     console.error('Erro no downloadYoutubeAudio:', error);
     throw error;
@@ -143,34 +105,36 @@ export async function downloadYoutubeAudio(query) {
 // Busca e baixa vídeo do YouTube
 export async function downloadYoutubeVideo(query) {
   try {
-    const url = await buscarUrlYoutube(query);
+    const searchResult = await yts(query);
+    const video = searchResult.videos ? searchResult.videos[0] : searchResult;
+    
+    if (!video || !video.url) {
+      throw new Error('Nenhum vídeo encontrado para a busca.');
+    }
+
     const tmpFile = path.join(os.tmpdir(), `yt-video-${Date.now()}.mp4`);
 
-    await ytdlpDownload(url, [
-      '-f', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720]',
+    const args = [
+      video.url,
+      ...buildBaseArgs(),
+      '--format', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720]/best',
       '--merge-output-format', 'mp4',
-      '-o', tmpFile,
-      url
-    ]);
+      '--output', tmpFile
+    ];
 
-    // Pega título do vídeo
-    let title = 'video';
-    try {
-      const info = await new Promise((resolve, reject) => {
-        const args = ['--get-title', '--no-playlist'];
-        if (fs.existsSync(COOKIES_PATH)) args.unshift('--cookies', COOKIES_PATH);
-        const proc = spawn('yt-dlp', [...args, url]);
-        let out = '';
-        proc.stdout.on('data', (d) => { out += d.toString(); });
-        proc.on('close', () => resolve(out.trim()));
-        proc.on('error', reject);
-      });
-      title = info || title;
-    } catch (_) {}
+    await runYtDlp(args);
 
-    return { filePath: tmpFile, title, duration: '', views: 0, author: '', url };
+    return {
+      filePath: tmpFile,
+      title: video.title || query,
+      duration: video.timestamp || '',
+      views: video.views || 0,
+      author: video.author?.name || '',
+      url: video.url
+    };
   } catch (error) {
     console.error('Erro no downloadYoutubeVideo:', error);
     throw error;
   }
 }
+

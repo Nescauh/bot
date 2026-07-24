@@ -4,3 +4,8 @@ session/
 qrcode.png
 *.png
 *.log
+bot_data.sqlite
+bot_data_fallback.json
+API-Youtube-Download/
+*.zip
+*-player-script.js

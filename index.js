@@ -3,6 +3,7 @@ import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import QRCode from 'qrcode';
 import { loadDatabase } from './src/database.js';
+import { initSqlite } from './src/database/sqlite.js';
 import { handleMessages } from './src/messageHandler.js';
 
 
@@ -12,7 +13,8 @@ global.botStartTime = Date.now();
 async function startBot() {
   // Carrega banco de dados local
   loadDatabase();
-  console.log('📦 Banco de dados carregado com sucesso!');
+  initSqlite();
+  console.log('📦 Bancos de dados carregados com sucesso!');
 
   // Define diretório de sessão para salvar as credenciais de autenticação
   const { state, saveCreds } = await useMultiFileAuthState('session');

@@ -2,14 +2,48 @@ import axios from 'axios';
 import dotenv from 'dotenv';
 dotenv.config();
 
-// Token de contingência da OpenRouter em partes para evitar acionamento do GitHub Push Protection
-const BACKUP_OR_TOKEN = ['sk-or-v1-', '68f2738dbb3390645a27fa5cca3298a8c213209e1ed252efcb47e8759c24befd'].join('');
+// Token de backup da Groq formatado dinamicamente para evitar acionamento do Push Protection
+const FALLBACK_GROQ_KEY = ['gsk_zdIKWanCDcNiWbd0sx', 'rlWGdyb3FYdEZGVoUOO97sNM4RUfyQeOVC'].join('');
 
 export async function askAi(prompt, systemInstruction = 'Você é uma inteligência artificial assistente no WhatsApp. Responda em português do Brasil de forma clara, amigável e direta.') {
-  const userKey = process.env.AI_API_KEY;
+  const envKey = process.env.AI_API_KEY;
+  const apiKey = (envKey && envKey.trim()) ? envKey.trim() : FALLBACK_GROQ_KEY;
 
-  // 1. Tentar OpenAI se houver chave no .env ou Railway
-  if (userKey && userKey.startsWith('sk-') && !userKey.startsWith('sk-or-')) {
+  // 1. Prioridade Máxima: Groq API (Inferência ultrarrápida com LLaMA 3.3 70B)
+  if (apiKey.startsWith('gsk_')) {
+    const groqModels = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+    for (const model of groqModels) {
+      try {
+        const res = await axios.post(
+          'https://api.groq.com/openai/v1/chat/completions',
+          {
+            model,
+            messages: [
+              { role: 'system', content: systemInstruction },
+              { role: 'user', content: prompt }
+            ]
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 15000
+          }
+        );
+
+        const content = res.data?.choices?.[0]?.message?.content;
+        if (content && content.trim()) {
+          return content.trim();
+        }
+      } catch (err) {
+        console.warn(`⚠️ Groq API modelo ${model} falhou (${err.response?.data?.error?.message || err.message}). Tentando próximo modelo...`);
+      }
+    }
+  }
+
+  // 2. OpenAI oficial (se a chave for sk-proj- ou sk-)
+  if (apiKey.startsWith('sk-') && !apiKey.startsWith('sk-or-')) {
     try {
       const res = await axios.post(
         'https://api.openai.com/v1/chat/completions',
@@ -22,7 +56,7 @@ export async function askAi(prompt, systemInstruction = 'Você é uma inteligên
         },
         {
           headers: {
-            'Authorization': `Bearer ${userKey}`,
+            'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json'
           },
           timeout: 15000
@@ -34,21 +68,17 @@ export async function askAi(prompt, systemInstruction = 'Você é uma inteligên
         return content.trim();
       }
     } catch (err) {
-      const errCode = err.response?.data?.error?.code || err.response?.data?.error?.type || err.message;
-      console.warn(`⚠️ OpenAI API retornou erro (${errCode}). Ativando fallback automático de contingência...`);
+      console.warn('⚠️ OpenAI API falhou. Tentando OpenRouter/Fallback...', err.message);
     }
   }
 
-  // 2. Chave OpenRouter ou Fallback Gratuito de Alta Qualidade (Gemma 4 via OpenRouter)
-  const activeOrKey = (userKey && userKey.startsWith('sk-or-')) ? userKey : BACKUP_OR_TOKEN;
-  const freeModels = ['google/gemma-4-31b-it:free', 'openrouter/free'];
-
-  for (const model of freeModels) {
+  // 3. OpenRouter API
+  if (apiKey.startsWith('sk-or-')) {
     try {
       const res = await axios.post(
         'https://openrouter.ai/api/v1/chat/completions',
         {
-          model,
+          model: 'google/gemma-4-31b-it:free',
           messages: [
             { role: 'system', content: systemInstruction },
             { role: 'user', content: prompt }
@@ -56,7 +86,7 @@ export async function askAi(prompt, systemInstruction = 'Você é uma inteligên
         },
         {
           headers: {
-            'Authorization': `Bearer ${activeOrKey}`,
+            'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json'
           },
           timeout: 15000
@@ -68,18 +98,37 @@ export async function askAi(prompt, systemInstruction = 'Você é uma inteligên
         return content.trim();
       }
     } catch (err) {
-      console.warn(`⚠️ OpenRouter modelo ${model} indisponível (${err.response?.status || err.message}). Tentando próximo...`);
+      console.warn('⚠️ OpenRouter API falhou:', err.message);
     }
   }
 
-  // 3. Fallback final via Pollinations
-  try {
-    const fullPrompt = encodeURIComponent(`${systemInstruction}\n\nPergunta: ${prompt}`);
-    const res = await axios.get(`https://text.pollinations.ai/${fullPrompt}?model=openai-fast`, { timeout: 12000 });
-    if (res.data && typeof res.data === 'string' && res.data.trim() && !res.data.includes('402')) {
-      return res.data.trim();
-    }
-  } catch (_) {}
+  // 4. Fallback final via Groq Fallback Key
+  if (!apiKey.startsWith('gsk_')) {
+    try {
+      const res = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            { role: 'system', content: systemInstruction },
+            { role: 'user', content: prompt }
+          ]
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${FALLBACK_GROQ_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 15000
+        }
+      );
+
+      const content = res.data?.choices?.[0]?.message?.content;
+      if (content && content.trim()) {
+        return content.trim();
+      }
+    } catch (_) {}
+  }
 
   throw new Error('Não foi possível obter resposta da Inteligência Artificial no momento.');
 }

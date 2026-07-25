@@ -31,8 +31,8 @@ import { handleDadoCommand } from './commands/fun/dado.js';
 import { handleCaraOuCoroaCommand } from './commands/fun/caraoucoroa.js';
 import { handlePptCommand } from './commands/fun/ppt.js';
 import { handleRoletaCommand } from './commands/fun/roleta.js';
-import { handleQuizCommand } from './commands/fun/quiz.js';
-import { handleForcaCommand } from './commands/fun/forca.js';
+import { handleQuizCommand, activeQuizGames, processQuizAnswer } from './commands/fun/quiz.js';
+import { handleForcaCommand, activeForcaGames, processForcaGuess } from './commands/fun/forca.js';
 
 import { handleDailyCommand } from './commands/economy/daily.js';
 import { handleSaldoCommand } from './commands/economy/saldo.js';
@@ -174,6 +174,30 @@ export async function handleMessages(sock, msg) {
     body = msg.message.imageMessage.caption;
   } else if (msg.message?.videoMessage?.caption) {
     body = msg.message.videoMessage.caption;
+  }
+
+  // 1.5. Processar palpites dos jogos interativos (Forca e Quiz)
+  if (body && !msg.key.fromMe) {
+    const isMenu = body.toLowerCase().startsWith(prefix + 'menu');
+    if (!isMenu) {
+      if (activeForcaGames.has(from)) {
+        const isForcaCmd = body.toLowerCase().startsWith(prefix + 'forca');
+        const guess = isForcaCmd ? body.slice((prefix + 'forca').length).trim() : body.trim();
+        if (guess) {
+          const handled = await processForcaGuess(sock, msg, from, guess, sender);
+          if (handled && !isForcaCmd) return;
+        }
+      }
+
+      if (activeQuizGames.has(from)) {
+        const isQuizCmd = body.toLowerCase().startsWith(prefix + 'quiz');
+        const answer = isQuizCmd ? body.slice((prefix + 'quiz').length).trim() : body.trim();
+        if (answer) {
+          const handled = await processQuizAnswer(sock, msg, from, answer, sender);
+          if (handled && !isQuizCmd) return;
+        }
+      }
+    }
   }
 
   // 2. Anti-link Automático
@@ -364,8 +388,8 @@ export async function handleMessages(sock, msg) {
     else if (command === 'caraoucoroa') await handleCaraOuCoroaCommand(sock, msg, args);
     else if (command === 'ppt') await handlePptCommand(sock, msg, args);
     else if (command === 'roleta') await handleRoletaCommand(sock, msg, sender);
-    else if (command === 'quiz') await handleQuizCommand(sock, msg, args);
-    else if (command === 'forca') await handleForcaCommand(sock, msg, args);
+    else if (command === 'quiz') await handleQuizCommand(sock, msg, args, sender);
+    else if (command === 'forca') await handleForcaCommand(sock, msg, args, sender);
     // 💰 Economia
     else if (command === 'daily') await handleDailyCommand(sock, msg, sender);
     else if (command === 'saldo') await handleSaldoCommand(sock, msg, sender, mentioned);

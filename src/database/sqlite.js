@@ -95,8 +95,68 @@ export async function initSqlite() {
       );
     `);
 
+    // Hidrata o memoryStore com os dados do SQLite existentes no arquivo
+    const store = getStore();
+    
+    try {
+      const resUsers = dbInstance.exec("SELECT * FROM users");
+      if (resUsers.length > 0) {
+        const columns = resUsers[0].columns;
+        resUsers[0].values.forEach(row => {
+          const userObj = {};
+          columns.forEach((col, idx) => userObj[col] = row[idx]);
+          if (userObj.jid) {
+            store.users[userObj.jid] = userObj;
+          }
+        });
+      }
+    } catch (e) {
+      console.error('Erro ao hidratar usuários do SQLite:', e);
+    }
+
+    try {
+      const resWarns = dbInstance.exec("SELECT * FROM warns");
+      if (resWarns.length > 0) {
+        const columns = resWarns[0].columns;
+        resWarns[0].values.forEach(row => {
+          const warnObj = {};
+          columns.forEach((col, idx) => warnObj[col] = row[idx]);
+          if (warnObj.group_jid && warnObj.user_jid) {
+            store.warns[`${warnObj.group_jid}_${warnObj.user_jid}`] = warnObj.count || 0;
+          }
+        });
+      }
+    } catch (e) {}
+
+    try {
+      const resGroup = dbInstance.exec("SELECT * FROM group_configs");
+      if (resGroup.length > 0) {
+        const columns = resGroup[0].columns;
+        resGroup[0].values.forEach(row => {
+          const cfgObj = {};
+          columns.forEach((col, idx) => cfgObj[col] = row[idx]);
+          if (cfgObj.group_jid) {
+            store.group_configs[cfgObj.group_jid] = cfgObj;
+          }
+        });
+      }
+    } catch (e) {}
+
+    try {
+      const resReminders = dbInstance.exec("SELECT * FROM reminders");
+      if (resReminders.length > 0) {
+        const columns = resReminders[0].columns;
+        store.reminders = resReminders[0].values.map(row => {
+          const rObj = {};
+          columns.forEach((col, idx) => rObj[col] = row[idx]);
+          return rObj;
+        });
+      }
+    } catch (e) {}
+
+    saveStore();
     saveSqliteFile();
-    console.log('🗄️ Banco de dados SQLite WebAssembly (sql.js) ativado com sucesso!');
+    console.log('🗄️ Banco de dados SQLite WebAssembly (sql.js) ativado e dados sincronizados!');
   } catch (err) {
     console.warn('⚠️ Falha ao carregar WebAssembly do SQLite. Utilizando armazenamento JSON local.', err.message);
     dbInstance = null;
@@ -108,27 +168,43 @@ export async function initSqlite() {
 export function getUser(jid) {
   const store = getStore();
   if (!store.users[jid]) {
-    store.users[jid] = {
-      jid,
-      wallet: 0,
-      bank: 0,
-      xp: 0,
-      level: 1,
-      last_daily: 0,
-      last_work: 0,
-      inventory: '[]'
-    };
-    saveStore();
-
+    let existingFromDb = null;
     if (dbInstance) {
       try {
-        dbInstance.run(
-          'INSERT OR IGNORE INTO users (jid, wallet, bank, xp, level, last_daily, last_work, inventory) VALUES (?, 0, 0, 0, 1, 0, 0, "[]")',
-          [jid]
-        );
-        saveSqliteFile();
+        const res = dbInstance.exec('SELECT * FROM users WHERE jid = ?', [jid]);
+        if (res.length > 0 && res[0].values.length > 0) {
+          const columns = res[0].columns;
+          const row = res[0].values[0];
+          existingFromDb = {};
+          columns.forEach((col, idx) => existingFromDb[col] = row[idx]);
+        }
       } catch (_) {}
     }
+
+    if (existingFromDb) {
+      store.users[jid] = existingFromDb;
+    } else {
+      store.users[jid] = {
+        jid,
+        wallet: 0,
+        bank: 0,
+        xp: 0,
+        level: 1,
+        last_daily: 0,
+        last_work: 0,
+        inventory: '[]'
+      };
+      if (dbInstance) {
+        try {
+          dbInstance.run(
+            'INSERT OR IGNORE INTO users (jid, wallet, bank, xp, level, last_daily, last_work, inventory) VALUES (?, 0, 0, 0, 1, 0, 0, "[]")',
+            [jid]
+          );
+        } catch (_) {}
+      }
+    }
+    saveStore();
+    saveSqliteFile();
   }
   return store.users[jid];
 }

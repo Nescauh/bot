@@ -1,4 +1,5 @@
 import { downloadMediaMessage as baileysDownload } from '@whiskeysockets/baileys';
+import axios from 'axios';
 import ytdl from 'youtube-dl-exec';
 import { execFile } from 'child_process';
 import ffmpegPath from 'ffmpeg-static';
@@ -174,5 +175,99 @@ export async function downloadYoutubeVideo(query) {
     throw error;
   }
 }
+
+// Busca e baixa vídeo do TikTok sem marca d'água
+export async function downloadTiktokVideo(url) {
+  try {
+    const apiRes = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`, { timeout: 15000 });
+    const resData = apiRes.data;
+
+    if (resData && resData.code === 0 && resData.data?.play) {
+      const videoUrl = resData.data.play;
+      const title = resData.data.title || 'Vídeo do TikTok';
+      const author = resData.data.author?.nickname || resData.data.author?.unique_id || 'TikTok User';
+
+      const videoRes = await axios.get(videoUrl, { responseType: 'arraybuffer', timeout: 30000 });
+      const tmpFile = path.join(os.tmpdir(), `tt-video-${Date.now()}.mp4`);
+      fs.writeFileSync(tmpFile, Buffer.from(videoRes.data));
+
+      return {
+        filePath: tmpFile,
+        title,
+        author,
+        url
+      };
+    }
+  } catch (err) {
+    console.warn('⚠️ Falha no TikWM API para vídeo, tentando via yt-dlp...', err.message);
+  }
+
+  // Fallback via yt-dlp
+  try {
+    const tmpFile = path.join(os.tmpdir(), `tt-video-${Date.now()}.mp4`);
+    const specificArgs = [
+      '--format', 'mp4',
+      '--output', tmpFile
+    ];
+    await downloadWithYtDlp(url, specificArgs);
+    return {
+      filePath: tmpFile,
+      title: 'Vídeo do TikTok',
+      author: 'TikTok',
+      url
+    };
+  } catch (error) {
+    console.error('Erro no downloadTiktokVideo:', error);
+    throw new Error('Não foi possível baixar o vídeo do TikTok.');
+  }
+}
+
+// Busca e baixa áudio do TikTok (MP3)
+export async function downloadTiktokAudio(url) {
+  try {
+    const apiRes = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`, { timeout: 15000 });
+    const resData = apiRes.data;
+
+    if (resData && resData.code === 0 && (resData.data?.music || resData.data?.play)) {
+      const audioUrl = resData.data.music || resData.data.play;
+      const title = resData.data.title || resData.data.music_info?.title || 'Áudio do TikTok';
+      const author = resData.data.author?.nickname || 'TikTok';
+
+      const audioRes = await axios.get(audioUrl, { responseType: 'arraybuffer', timeout: 30000 });
+      const tmpFile = path.join(os.tmpdir(), `tt-audio-${Date.now()}.mp3`);
+      fs.writeFileSync(tmpFile, Buffer.from(audioRes.data));
+
+      return {
+        filePath: tmpFile,
+        title,
+        author,
+        url
+      };
+    }
+  } catch (err) {
+    console.warn('⚠️ Falha no TikWM API para áudio, tentando via yt-dlp...', err.message);
+  }
+
+  // Fallback via yt-dlp
+  try {
+    const tmpFile = path.join(os.tmpdir(), `tt-audio-${Date.now()}.mp3`);
+    const specificArgs = [
+      '--extract-audio',
+      '--audio-format', 'mp3',
+      '--output', tmpFile
+    ];
+    await downloadWithYtDlp(url, specificArgs);
+    return {
+      filePath: tmpFile,
+      title: 'Áudio do TikTok',
+      author: 'TikTok',
+      url
+    };
+  } catch (error) {
+    console.error('Erro no downloadTiktokAudio:', error);
+    throw new Error('Não foi possível baixar o áudio do TikTok.');
+  }
+}
+
 
 

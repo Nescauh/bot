@@ -5,11 +5,20 @@ dotenv.config();
 // Verifica se o JID é o dono do bot
 export function checkIfOwner(sender) {
   if (!sender) return false;
-  const owner = (process.env.OWNER_NUMBER || '').replace(/\D/g, '');
-  const cleanSender = sender.replace(/\D/g, '');
-  if (!owner) return false;
-  // Compara os últimos 8 dígitos para mitigar a diferença do 9º dígito no BR
-  return cleanSender.endsWith(owner.slice(-8)) || owner.endsWith(cleanSender.slice(-8));
+  const ownerEnv = process.env.OWNER_NUMBER || '';
+  const ownerList = ownerEnv.split(/[,;\s]+/).map(num => num.replace(/\D/g, '')).filter(Boolean);
+  
+  // Limpa o JID removendo sufixo de dispositivo (:1, :10) e domínio (@s.whatsapp.net)
+  const cleanSender = sender.split('@')[0].split(':')[0].replace(/\D/g, '');
+  if (!cleanSender || ownerList.length === 0) return false;
+
+  const sender8 = cleanSender.slice(-8);
+
+  return ownerList.some(owner => {
+    if (cleanSender === owner) return true;
+    const owner8 = owner.slice(-8);
+    return owner8.length >= 8 && owner8 === sender8;
+  });
 }
 
 // Verifica se um participante é admin

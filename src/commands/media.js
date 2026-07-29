@@ -1,6 +1,6 @@
 import { Sticker, StickerTypes } from 'wa-sticker-formatter';
 import { getDatabase } from '../database.js';
-import { downloadWhatsAppMedia, downloadYoutubeAudio, downloadYoutubeVideo } from '../utils/helpers.js';
+import { downloadWhatsAppMedia, downloadYoutubeAudio, downloadYoutubeVideo, downloadTiktokVideo, downloadTiktokAudio } from '../utils/helpers.js';
 import { checkIfOwner } from './admin.js';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
@@ -224,7 +224,28 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
     case 'play': {
       const query = args.join(' ');
       if (!query) {
-        return reply('⚠️ Digite o nome da música ou o link do YouTube. Exemplo: /play Linkin Park Numb');
+        return reply('⚠️ Digite o nome da música ou o link do YouTube/TikTok. Exemplo: /play Linkin Park Numb');
+      }
+
+      if (/tiktok\.com/i.test(query)) {
+        await reply('⏳ Baixando áudio do TikTok, aguarde...');
+        try {
+          const music = await downloadTiktokAudio(query);
+          await sock.sendMessage(
+            from, 
+            { 
+              audio: { url: music.filePath }, 
+              mimetype: 'audio/mp4', 
+              fileName: `${music.title}.mp3` 
+            }, 
+            { quoted: msg }
+          );
+          fs.unlinkSync(music.filePath);
+          return;
+        } catch (error) {
+          console.error('Erro ao baixar áudio do TikTok via /play:', error);
+          return reply('⚠️ Erro ao baixar áudio do TikTok.');
+        }
       }
 
       await reply('⏳ Buscando e baixando áudio do YouTube, aguarde...');
@@ -255,7 +276,27 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
     case 'video': {
       const query = args.join(' ');
       if (!query) {
-        return reply('⚠️ Digite o nome do vídeo ou o link do YouTube. Exemplo: /video Minecraft Speedrun');
+        return reply('⚠️ Digite o nome do vídeo ou o link do YouTube/TikTok. Exemplo: /video Minecraft Speedrun');
+      }
+
+      if (/tiktok\.com/i.test(query)) {
+        await reply('⏳ Baixando vídeo do TikTok sem marca d\'água, aguarde...');
+        try {
+          const video = await downloadTiktokVideo(query);
+          await sock.sendMessage(
+            from, 
+            { 
+              video: { url: video.filePath }, 
+              caption: `🎥 *${video.title}*\n\nCriador: ${video.author}`
+            }, 
+            { quoted: msg }
+          );
+          fs.unlinkSync(video.filePath);
+          return;
+        } catch (error) {
+          console.error('Erro ao baixar vídeo do TikTok via /video:', error);
+          return reply('⚠️ Erro ao baixar vídeo do TikTok.');
+        }
       }
 
       await reply('⏳ Buscando e baixando vídeo do YouTube, aguarde...');
@@ -282,7 +323,63 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
       break;
     }
 
+    case 'tiktok':
+    case 'ttvideo': {
+      const url = args[0];
+      if (!url || !/tiktok\.com/i.test(url)) {
+        return reply('⚠️ Cole um link válido do TikTok. Exemplo: `/tiktok https://vm.tiktok.com/...`');
+      }
+
+      await reply('⏳ Baixando vídeo do TikTok sem marca d\'água, aguarde...');
+
+      try {
+        const video = await downloadTiktokVideo(url);
+        await sock.sendMessage(
+          from, 
+          { 
+            video: { url: video.filePath }, 
+            caption: `🎥 *${video.title}*\n\nCriador: ${video.author}`
+          }, 
+          { quoted: msg }
+        );
+        fs.unlinkSync(video.filePath);
+      } catch (error) {
+        console.error('Erro ao baixar vídeo do TikTok:', error);
+        return reply('⚠️ Erro ao baixar vídeo do TikTok. Verifique o link e tente novamente.');
+      }
+      break;
+    }
+
+    case 'tiktokaudio':
+    case 'ttplay': {
+      const url = args[0];
+      if (!url || !/tiktok\.com/i.test(url)) {
+        return reply('⚠️ Cole um link válido do TikTok. Exemplo: `/tiktokaudio https://vm.tiktok.com/...`');
+      }
+
+      await reply('⏳ Baixando áudio do TikTok, aguarde...');
+
+      try {
+        const music = await downloadTiktokAudio(url);
+        await sock.sendMessage(
+          from, 
+          { 
+            audio: { url: music.filePath }, 
+            mimetype: 'audio/mp4', 
+            fileName: `${music.title}.mp3` 
+          }, 
+          { quoted: msg }
+        );
+        fs.unlinkSync(music.filePath);
+      } catch (error) {
+        console.error('Erro ao baixar áudio do TikTok:', error);
+        return reply('⚠️ Erro ao baixar áudio do TikTok. Verifique o link e tente novamente.');
+      }
+      break;
+    }
+
     default:
       break;
   }
 }
+

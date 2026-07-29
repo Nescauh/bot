@@ -274,6 +274,8 @@ export async function handleMessages(sock, msg) {
                        `─── Comandos Originais ───\n` +
                        `「 🎵 」/play — baixar musica\n` +
                        `「 🎥 」/video — Baixar vídeo\n` +
+                       `「 📱 」/tiktok — vídeo do TikTok sem marca d'água\n` +
+                       `「 🎶 」/tiktokaudio — áudio MP3 do TikTok\n` +
                        `「 🖼️ 」/sticker — Figurinha\n` +
                        `「 🖼️ 」/unsticker — transforma sticker em imagem\n` +
                        `「 💍 」/casar - pedir casamento\n` +
@@ -329,26 +331,19 @@ export async function handleMessages(sock, msg) {
                        `「 📇 」/rank - cartão de status do perfil\n` +
                        `「 🌟 」/top - ranking dos maiores níveis\n\n` +
                        `🛠 *UTILIDADES*\n` +
-                       `「 📍 」/cep - consultar endereço por CEP\n` +
                        `「 🌤️ 」/clima - previsão do tempo por cidade\n` +
                        `「 🔢 」/calculadora - calcular expressões matemáticas\n` +
                        `「 ⏰ 」/lembrete - agendar alertas e lembretes\n` +
                        `「 🏁 」/qrcode - gerar imagem de QR Code\n` +
                        `「 🔍 」/readqr - ler QR Code de imagem\n` +
                        `「 🗣️ 」/tts - converter texto em áudio falado\n` +
-                       `「 📝 」/ocr - extrair texto de fotos\n\n` +
-                       `ℹ *INFORMAÇÕES*\n` +
-                       `「 🏓 」/ping - latência do bot em milissegundos\n` +
-                       `「 🌙 」/uptime - tempo online do bot\n` +
-                       `「 ℹ️ 」/info - informações do bot\n` +
-                       `「 💻 」/botinfo - dados técnicos do servidor\n` +
-                       `「 👥 」/grupo - informações sobre o grupo\n` +
+                       `「 📝 」/ocr - extrair texto de fotos\n` +
                        `══════════════════\n` +
                        `🤖 Bot: Online\n` +
                        `⚡ Velocidade: ${velocityStr}s\n` +
                        `🌙 Uptime: ${uptimeStr}\n` +
                        `══════════════════`;
-                       
+                        
       await sock.sendMessage(from, { text: menuText }, { quoted: msg });
     }
     // Comandos Sociais Legados
@@ -360,7 +355,7 @@ export async function handleMessages(sock, msg) {
       await handleAdminCommands(sock, msg, command, args, sender, mentioned);
     } 
     // Comandos de Mídia Legados
-    else if (['sticker', 'unsticker', 'ver', 'play', 'video'].includes(command)) {
+    else if (['sticker', 'unsticker', 'ver', 'play', 'video', 'tiktok', 'ttvideo', 'tiktokaudio', 'ttplay'].includes(command)) {
       await handleMediaCommands(sock, msg, command, args, sender);
     }
     // 🤖 IA

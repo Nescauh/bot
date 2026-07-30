@@ -1,6 +1,6 @@
 import { Sticker, StickerTypes } from 'wa-sticker-formatter';
 import { getDatabase } from '../database.js';
-import { downloadWhatsAppMedia, downloadYoutubeAudio, downloadYoutubeVideo, downloadTiktokVideo, downloadTiktokAudio } from '../utils/helpers.js';
+import { downloadWhatsAppMedia, downloadYoutubeAudio, downloadYoutubeVideo, downloadTiktokVideo, downloadTiktokAudio, downloadInstagramVideo, downloadInstagramAudio } from '../utils/helpers.js';
 import { checkIfOwner } from './admin.js';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
@@ -224,7 +224,7 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
     case 'play': {
       const query = args.join(' ');
       if (!query) {
-        return reply('⚠️ Digite o nome da música ou o link do YouTube/TikTok. Exemplo: /play Linkin Park Numb');
+        return reply('⚠️ Digite o nome da música ou o link do YouTube/TikTok/Instagram. Exemplo: /play Linkin Park Numb');
       }
 
       if (/tiktok\.com/i.test(query)) {
@@ -245,6 +245,27 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
         } catch (error) {
           console.error('Erro ao baixar áudio do TikTok via /play:', error);
           return reply('⚠️ Erro ao baixar áudio do TikTok.');
+        }
+      }
+
+      if (/instagram\.com/i.test(query)) {
+        await reply('⏳ Baixando áudio do Instagram, aguarde...');
+        try {
+          const music = await downloadInstagramAudio(query);
+          await sock.sendMessage(
+            from, 
+            { 
+              audio: { url: music.filePath }, 
+              mimetype: 'audio/mp4', 
+              fileName: `${music.title}.mp3` 
+            }, 
+            { quoted: msg }
+          );
+          fs.unlinkSync(music.filePath);
+          return;
+        } catch (error) {
+          console.error('Erro ao baixar áudio do Instagram via /play:', error);
+          return reply('⚠️ Erro ao baixar áudio do Instagram. Verifique se a publicação é pública.');
         }
       }
 
@@ -276,7 +297,7 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
     case 'video': {
       const query = args.join(' ');
       if (!query) {
-        return reply('⚠️ Digite o nome do vídeo ou o link do YouTube/TikTok. Exemplo: /video Minecraft Speedrun');
+        return reply('⚠️ Digite o nome do vídeo ou o link do YouTube/TikTok/Instagram. Exemplo: /video Minecraft Speedrun');
       }
 
       if (/tiktok\.com/i.test(query)) {
@@ -296,6 +317,26 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
         } catch (error) {
           console.error('Erro ao baixar vídeo do TikTok via /video:', error);
           return reply('⚠️ Erro ao baixar vídeo do TikTok.');
+        }
+      }
+
+      if (/instagram\.com/i.test(query)) {
+        await reply('⏳ Baixando vídeo do Instagram, aguarde...');
+        try {
+          const video = await downloadInstagramVideo(query);
+          await sock.sendMessage(
+            from, 
+            { 
+              video: { url: video.filePath }, 
+              caption: `🎥 *${video.title}*\n\nOrigem: Instagram`
+            }, 
+            { quoted: msg }
+          );
+          fs.unlinkSync(video.filePath);
+          return;
+        } catch (error) {
+          console.error('Erro ao baixar vídeo do Instagram via /video:', error);
+          return reply('⚠️ Erro ao baixar vídeo do Instagram. Verifique se a publicação é pública.');
         }
       }
 
@@ -319,6 +360,64 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
         console.error('Erro ao baixar vídeo:', error);
         const detail = error?.message ? ` (${error.message.slice(0, 100)})` : '';
         return reply(`⚠️ Erro ao buscar/baixar o vídeo${detail}. O vídeo pode ser muito grande ou indisponível.`);
+      }
+      break;
+    }
+
+    case 'ig':
+    case 'insta':
+    case 'igvideo':
+    case 'instavideo': {
+      const url = args[0];
+      if (!url || !/instagram\.com/i.test(url)) {
+        return reply('⚠️ Cole um link válido do Instagram. Exemplo: `/ig https://www.instagram.com/reel/...`');
+      }
+
+      await reply('⏳ Baixando vídeo do Instagram, aguarde...');
+
+      try {
+        const video = await downloadInstagramVideo(url);
+        await sock.sendMessage(
+          from, 
+          { 
+            video: { url: video.filePath }, 
+            caption: `🎥 *${video.title}*\n\nOrigem: Instagram`
+          }, 
+          { quoted: msg }
+        );
+        fs.unlinkSync(video.filePath);
+      } catch (error) {
+        console.error('Erro ao baixar vídeo do Instagram:', error);
+        return reply('⚠️ Erro ao baixar vídeo do Instagram. Verifique o link e tente novamente.');
+      }
+      break;
+    }
+
+    case 'igaudio':
+    case 'instaaudio':
+    case 'igplay': {
+      const url = args[0];
+      if (!url || !/instagram\.com/i.test(url)) {
+        return reply('⚠️ Cole um link válido do Instagram. Exemplo: `/igaudio https://www.instagram.com/reel/...`');
+      }
+
+      await reply('⏳ Baixando áudio do Instagram, aguarde...');
+
+      try {
+        const music = await downloadInstagramAudio(url);
+        await sock.sendMessage(
+          from, 
+          { 
+            audio: { url: music.filePath }, 
+            mimetype: 'audio/mp4', 
+            fileName: `${music.title}.mp3` 
+          }, 
+          { quoted: msg }
+        );
+        fs.unlinkSync(music.filePath);
+      } catch (error) {
+        console.error('Erro ao baixar áudio do Instagram:', error);
+        return reply('⚠️ Erro ao baixar áudio do Instagram. Verifique o link e tente novamente.');
       }
       break;
     }

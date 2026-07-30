@@ -269,5 +269,54 @@ export async function downloadTiktokAudio(url) {
   }
 }
 
+// Busca e baixa vídeo do Instagram
+export async function downloadInstagramVideo(url) {
+  try {
+    const tmpFile = path.join(os.tmpdir(), `ig-video-${Date.now()}.mp4`);
+    const specificArgs = [
+      '--format', 'mp4/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+      '--output', tmpFile
+    ];
+
+    await downloadWithYtDlp(url, specificArgs);
+
+    return {
+      filePath: tmpFile,
+      title: 'Vídeo do Instagram',
+      author: 'Instagram',
+      url
+    };
+  } catch (error) {
+    console.error('Erro no downloadInstagramVideo:', error);
+    throw new Error('Não foi possível baixar o vídeo do Instagram. Certifique-se de que a conta ou publicação é pública.');
+  }
+}
+
+// Busca e baixa áudio do Instagram (MP3)
+export async function downloadInstagramAudio(url) {
+  try {
+    const tmpFile = path.join(os.tmpdir(), `ig-audio-${Date.now()}.mp3`);
+    const specificArgs = [
+      '--extract-audio',
+      '--audio-format', 'mp3',
+      '--audio-quality', '0',
+      '--output', tmpFile
+    ];
+
+    await downloadWithYtDlp(url, specificArgs);
+
+    return {
+      filePath: tmpFile,
+      title: 'Áudio do Instagram',
+      author: 'Instagram',
+      url
+    };
+  } catch (error) {
+    console.error('Erro no downloadInstagramAudio:', error);
+    throw new Error('Não foi possível baixar o áudio do Instagram. Certifique-se de que a conta ou publicação é pública.');
+  }
+}
+
+
 
 

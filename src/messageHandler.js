@@ -272,8 +272,10 @@ export async function handleMessages(sock, msg) {
                        ` ✨ SERIE BOT ✨ \n` +
                        `╚════════════════╝\n` +
                        `─── Comandos Originais ───\n` +
-                       `「 🎵 」/play — baixar musica\n` +
-                       `「 🎥 」/video — Baixar vídeo\n` +
+                       `「 🎵 」/play — baixar música (YouTube / TikTok / Instagram)\n` +
+                       `「 🎥 」/video — Baixar vídeo (YouTube / TikTok / Instagram)\n` +
+                       `「 📸 」/ig — vídeo do Instagram\n` +
+                       `「 🎧 」/igaudio — áudio do Instagram\n` +
                        `「 📱 」/tiktok — vídeo do TikTok sem marca d'água\n` +
                        `「 🎶 」/tiktokaudio — áudio MP3 do TikTok\n` +
                        `「 🖼️ 」/sticker — Figurinha\n` +
@@ -336,7 +338,7 @@ export async function handleMessages(sock, msg) {
                        `「 ⏰ 」/lembrete - agendar alertas e lembretes\n` +
                        `「 🏁 」/qrcode - gerar imagem de QR Code\n` +
                        `「 🔍 」/readqr - ler QR Code de imagem\n` +
-                       `「 🗣️ 」/tts - converter texto em áudio falado\n` +
+                       `「 🗣️ 」/tts - texto em áudio (com várias vozes)\n` +
                        `「 📝 」/ocr - extrair texto de fotos\n` +
                        `══════════════════\n` +
                        `🤖 Bot: Online\n` +
@@ -355,7 +357,7 @@ export async function handleMessages(sock, msg) {
       await handleAdminCommands(sock, msg, command, args, sender, mentioned);
     } 
     // Comandos de Mídia Legados
-    else if (['sticker', 'unsticker', 'ver', 'play', 'video', 'tiktok', 'ttvideo', 'tiktokaudio', 'ttplay'].includes(command)) {
+    else if (['sticker', 'unsticker', 'ver', 'play', 'video', 'tiktok', 'ttvideo', 'tiktokaudio', 'ttplay', 'ig', 'insta', 'igvideo', 'igaudio', 'instavideo', 'instaaudio', 'igplay'].includes(command)) {
       await handleMediaCommands(sock, msg, command, args, sender);
     }
     // 🤖 IA

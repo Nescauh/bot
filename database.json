@@ -14,5 +14,20 @@
     "5571981756869@s.whatsapp.net",
     "557181756869@s.whatsapp.net"
   ],
-  "configGrupos": {}
+  "configGrupos": {},
+  "users": {
+    "5571981756869@s.whatsapp.net": {
+      "jid": "5571981756869@s.whatsapp.net",
+      "wallet": 500,
+      "bank": 0,
+      "xp": 250,
+      "level": 2,
+      "last_daily": 0,
+      "last_work": 0,
+      "inventory": "[]"
+    }
+  },
+  "warns": {},
+  "group_configs": {},
+  "reminders": []
 }

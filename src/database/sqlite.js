@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 
 const DB_PATH = path.resolve('bot_data.sqlite');
-const FALLBACK_JSON_PATH = path.resolve('bot_data.json');
+const FALLBACK_JSON_PATH = path.resolve('database.json');
 
 let dbInstance = null;
 let memoryStore = null;
@@ -18,13 +18,18 @@ function getStore() {
   }
 
   if (!memoryStore) {
-    memoryStore = {
-      users: {},
-      warns: {},
-      group_configs: {},
-      reminders: []
-    };
+    memoryStore = {};
   }
+
+  memoryStore.users = memoryStore.users || {};
+  memoryStore.warns = memoryStore.warns || {};
+  memoryStore.group_configs = memoryStore.group_configs || {};
+  memoryStore.reminders = memoryStore.reminders || [];
+  memoryStore.casamentos = memoryStore.casamentos || {};
+  memoryStore.pedidosCasamento = memoryStore.pedidosCasamento || {};
+  memoryStore.autorizadosVer = memoryStore.autorizadosVer || [];
+  memoryStore.configGrupos = memoryStore.configGrupos || {};
+
   return memoryStore;
 }
 
@@ -33,7 +38,7 @@ function saveStore() {
   try {
     fs.writeFileSync(FALLBACK_JSON_PATH, JSON.stringify(memoryStore, null, 2), 'utf-8');
   } catch (err) {
-    console.error('Erro ao salvar fallback do banco de dados:', err);
+    console.error('Erro ao salvar banco de dados em database.json:', err);
   }
 }
 

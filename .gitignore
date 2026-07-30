@@ -5,6 +5,7 @@ qrcode.png
 *.png
 *.log
 bot_data.sqlite
+bot_data.json
 bot_data_fallback.json
 API-Youtube-Download/
 *.zip

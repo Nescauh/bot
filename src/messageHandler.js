@@ -162,8 +162,6 @@ export async function handleMessages(sock, msg) {
 
   cacheMessage(from, msg);
 
-  if (msg.key.fromMe) return;
-
   // Extrair texto da mensagem
   let body = '';
   if (msg.message?.conversation) {
@@ -175,6 +173,9 @@ export async function handleMessages(sock, msg) {
   } else if (msg.message?.videoMessage?.caption) {
     body = msg.message.videoMessage.caption;
   }
+
+  // Ignorar mensagens enviadas pelo próprio bot, a menos que sejam comandos iniciados pelo prefixo
+  if (msg.key.fromMe && !body.startsWith(prefix)) return;
 
   // 1.5. Processar palpites dos jogos interativos (Forca e Quiz)
   if (body && !msg.key.fromMe) {

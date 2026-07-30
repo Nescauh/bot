@@ -3,14 +3,18 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Verifica se o JID é o dono do bot
-export function checkIfOwner(sender) {
+export function checkIfOwner(sender, msg = null) {
+  if (msg?.key?.fromMe) return true;
   if (!sender) return false;
+
   const ownerEnv = process.env.OWNER_NUMBER || '';
   const ownerList = ownerEnv.split(/[,;\s]+/).map(num => num.replace(/\D/g, '')).filter(Boolean);
   
-  // Limpa o JID removendo sufixo de dispositivo (:1, :10) e domínio (@s.whatsapp.net)
+  // Limpa o JID removendo sufixo de dispositivo (:1, :10) e domínio (@s.whatsapp.net, @lid)
   const cleanSender = sender.split('@')[0].split(':')[0].replace(/\D/g, '');
-  if (!cleanSender || ownerList.length === 0) return false;
+  if (!cleanSender) return false;
+
+  if (ownerList.length === 0) return true; // Se não houver lista definida, por segurança permite apenas se for do próprio bot
 
   const sender8 = cleanSender.slice(-8);
 
@@ -23,7 +27,20 @@ export function checkIfOwner(sender) {
 
 // Verifica se um participante é admin
 export function isAdmin(participants, jid) {
-  const participant = participants.find(p => p.id === jid);
+  if (!participants || !jid) return false;
+  const cleanJid = jid.split('@')[0].split(':')[0].replace(/\D/g, '');
+  if (!cleanJid) return false;
+
+  const jid8 = cleanJid.slice(-8);
+
+  const participant = participants.find(p => {
+    if (!p.id) return false;
+    const cleanP = p.id.split('@')[0].split(':')[0].replace(/\D/g, '');
+    if (cleanP === cleanJid) return true;
+    const p8 = cleanP.slice(-8);
+    return p8.length >= 8 && p8 === jid8;
+  });
+
   return participant && (participant.admin === 'admin' || participant.admin === 'superadmin');
 }
 
@@ -35,7 +52,7 @@ export async function handleAdminCommands(sock, msg, command, args, sender, ment
     await sock.sendMessage(from, { text, mentions }, { quoted: msg });
   };
 
-  const isSenderOwner = checkIfOwner(sender);
+  const isSenderOwner = checkIfOwner(sender, msg);
 
   switch (command) {
     case 'ban': {

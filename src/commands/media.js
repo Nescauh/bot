@@ -8,10 +8,12 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
+import { execFile } from 'child_process';
+
 // Configura o caminho do ffmpeg
 ffmpeg.setFfmpegPath(ffmpegPath);
 
-// Função para converter WebP para PNG usando FFMPEG
+// Função para converter WebP estático para PNG usando FFMPEG
 function convertWebpToPng(inputPath) {
   const outputPath = path.join(os.tmpdir(), `unsticker-${Date.now()}.png`);
   return new Promise((resolve, reject) => {
@@ -20,6 +22,56 @@ function convertWebpToPng(inputPath) {
       .on('end', () => resolve(outputPath))
       .on('error', (err) => reject(err))
       .run();
+  });
+}
+
+// Função para converter Vídeo em Figurinha Animada WebP
+function convertVideoToAnimatedSticker(inputPath) {
+  const outputPath = path.join(os.tmpdir(), `anim-sticker-${Date.now()}.webp`);
+  return new Promise((resolve, reject) => {
+    const args = [
+      '-y',
+      '-i', inputPath,
+      '-vcodec', 'libwebp',
+      '-filter_complex', '[0:v] scale=512:512:force_original_aspect_ratio=decrease,fps=12,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000',
+      '-loop', '0',
+      '-ss', '00:00:00',
+      '-t', '00:00:10',
+      '-preset', 'default',
+      '-an',
+      '-vsync', '0',
+      outputPath
+    ];
+    execFile(ffmpegPath, args, (err) => {
+      if (err) return reject(err);
+      try {
+        const buffer = fs.readFileSync(outputPath);
+        try { fs.unlinkSync(outputPath); } catch (_) {}
+        resolve(buffer);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  });
+}
+
+// Função para converter Figurinha Animada (WebP) em MP4/GIF
+function convertWebpToMp4(inputPath) {
+  const outputPath = path.join(os.tmpdir(), `unsticker-anim-${Date.now()}.mp4`);
+  return new Promise((resolve, reject) => {
+    const args = [
+      '-y',
+      '-i', inputPath,
+      '-pix_fmt', 'yuv420p',
+      '-c:v', 'libx264',
+      '-movflags', '+faststart',
+      '-filter_complex', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+      outputPath
+    ];
+    execFile(ffmpegPath, args, (err) => {
+      if (err) return reject(err);
+      resolve(outputPath);
+    });
   });
 }
 
@@ -41,10 +93,9 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
         mediaMessage = msg;
         mediaType = 'image';
       } else if (msg.message?.videoMessage) {
-        // Vídeos com menos de 10 segundos podem ser stickers animados
         const duration = msg.message.videoMessage.seconds;
-        if (duration > 10) {
-          return reply('⚠️ O vídeo deve ter no máximo 10 segundos para virar figurinha animada.');
+        if (duration > 15) {
+          return reply('⚠️ O vídeo deve ter no máximo 15 segundos para virar figurinha animada.');
         }
         mediaMessage = msg;
         mediaType = 'video';
@@ -64,8 +115,8 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
             mediaType = 'image';
           } else if (quoted.videoMessage) {
             const duration = quoted.videoMessage.seconds;
-            if (duration > 10) {
-              return reply('⚠️ O vídeo deve ter no máximo 10 segundos para virar figurinha animada.');
+            if (duration > 15) {
+              return reply('⚠️ O vídeo deve ter no máximo 15 segundos para virar figurinha animada.');
             }
             mediaMessage = {
               key: {
@@ -88,18 +139,24 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
 
       try {
         const filePath = await downloadWhatsAppMedia(mediaMessage, mediaType);
-        
-        const sticker = new Sticker(filePath, {
-          pack: 'Série Bot 🤖',
-          author: 'Bot de Whatsapp',
-          type: StickerTypes.FULL,
-          quality: 60
-        });
+        let buffer;
 
-        const buffer = await sticker.toBuffer();
+        if (mediaType === 'video') {
+          // Converte o vídeo em WebP animado com FFMPEG
+          buffer = await convertVideoToAnimatedSticker(filePath);
+        } else {
+          // Imagem estática
+          const sticker = new Sticker(filePath, {
+            pack: 'Série Bot 🤖',
+            author: 'Bot de Whatsapp',
+            type: StickerTypes.FULL,
+            quality: 60
+          });
+          buffer = await sticker.toBuffer();
+        }
         
         // Apaga arquivo temporário
-        fs.unlinkSync(filePath);
+        try { fs.unlinkSync(filePath); } catch (_) {}
 
         await sock.sendMessage(from, { sticker: buffer }, { quoted: msg });
       } catch (error) {
@@ -112,6 +169,7 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
     case 'unsticker': {
       const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
       let stickerMessage = null;
+      let isAnimated = false;
 
       if (quoted?.stickerMessage) {
         stickerMessage = {
@@ -122,29 +180,45 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
           },
           message: quoted
         };
+        isAnimated = quoted.stickerMessage.isAnimated === true;
       }
 
       if (!stickerMessage) {
-        return reply('⚠️ Responda a uma figurinha com /unsticker para transformá-la em imagem.');
+        return reply('⚠️ Responda a uma figurinha com /unsticker para transformá-la em imagem ou GIF/vídeo.');
       }
 
-      await reply('⏳ Convertendo figurinha em imagem, aguarde...');
+      await reply('⏳ Convertendo figurinha, aguarde...');
 
       try {
         const filePath = await downloadWhatsAppMedia(stickerMessage, 'sticker');
         
-        // Converte WebP para PNG
+        if (isAnimated) {
+          // Tenta converter WebP animado em MP4/GIF
+          try {
+            const mp4Path = await convertWebpToMp4(filePath);
+            await sock.sendMessage(from, { 
+              video: { url: mp4Path }, 
+              gifPlayback: true,
+              caption: '🎬 Figurinha animada convertida em GIF com sucesso!' 
+            }, { quoted: msg });
+            
+            try { fs.unlinkSync(filePath); } catch (_) {}
+            try { fs.unlinkSync(mp4Path); } catch (_) {}
+            return;
+          } catch (animErr) {
+            console.warn('⚠️ Falha ao converter sticker animado para MP4, tentando PNG:', animErr.message);
+          }
+        }
+
+        // Se for estático ou fallback para PNG
         const pngPath = await convertWebpToPng(filePath);
-        
-        // Envia de volta como imagem
         await sock.sendMessage(from, { image: { url: pngPath }, caption: '🖼️ Figurinha convertida com sucesso!' }, { quoted: msg });
         
-        // Limpa temporários
-        fs.unlinkSync(filePath);
-        fs.unlinkSync(pngPath);
+        try { fs.unlinkSync(filePath); } catch (_) {}
+        try { fs.unlinkSync(pngPath); } catch (_) {}
       } catch (error) {
         console.error('Erro ao converter figurinha:', error);
-        return reply('⚠️ Erro ao converter a figurinha para imagem.');
+        return reply('⚠️ Erro ao converter a figurinha.');
       }
       break;
     }

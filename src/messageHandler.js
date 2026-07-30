@@ -260,9 +260,7 @@ export async function handleMessages(sock, msg) {
 
   console.log(`[COMANDO] ${command} executado por ${sender} no chat ${from}`);
 
-  try {
-    // Menu Principal com todas as categorias
-    if (['menu', 'help', 'bot'].includes(command)) {
+  try {    if (['menu', 'help', 'bot'].includes(command)) {
       const uptimeSeconds = (Date.now() - (global.botStartTime || Date.now())) / 1000;
       const uptimeStr = formatUptime(uptimeSeconds);
       
@@ -271,7 +269,7 @@ export async function handleMessages(sock, msg) {
       const velocityStr = latency < 0 ? '0.002' : latency;
 
       const menuText = `╔════════════════╗\n` +
-                       ` ✨ SERIE BOT ✨ \n` +
+                       ` ✨ SUBARU BOT ✨ \n` +
                        `╚════════════════╝\n` +
                        `─── Comandos Originais ───\n` +
                        `「 🎵 」/play — baixar música (YouTube / TikTok / Instagram)\n` +
@@ -344,12 +342,17 @@ export async function handleMessages(sock, msg) {
                        `「 🗣️ 」/tts - texto em áudio (com várias vozes)\n` +
                        `「 📝 」/ocr - extrair texto de fotos\n` +
                        `══════════════════\n` +
-                       `🤖 Bot: Online\n` +
+                       `🤖 Bot: SUBARU BOT\n` +
                        `⚡ Velocidade: ${velocityStr}s\n` +
                        `🌙 Uptime: ${uptimeStr}\n` +
                        `══════════════════`;
-                        
-      await sock.sendMessage(from, { text: menuText }, { quoted: msg });
+                         
+       const menuImgPath = path.resolve('assets/menu.jpg');
+       if (fs.existsSync(menuImgPath)) {
+         return sock.sendMessage(from, { image: fs.readFileSync(menuImgPath), caption: menuText }, { quoted: msg });
+       } else {
+         return sock.sendMessage(from, { text: menuText }, { quoted: msg });
+       }
     }
     // Comandos Sociais Legados
     else if (['casar', 'aceitar', 'recusar', 'divorcio', 'perfil', 'gay', 'romance'].includes(command)) {

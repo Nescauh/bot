@@ -4,7 +4,7 @@ const wordsWithHints = [
   { word: 'WHATSAPP', hint: 'Aplicativo de mensagens' },
   { word: 'TECNOLOGIA', hint: 'Ciência dos recursos computacionais' },
   { word: 'PROGRAMACAO', hint: 'Arte de escrever código' },
-  { word: 'SERIEBOT', hint: 'Nome do seu bot preferido' },
+  { word: 'SUBARUBOT', hint: 'Nome do seu bot preferido' },
   { word: 'DESENVOLVIMENTO', hint: 'Processo de criação de software' },
   { word: 'BATERIA', hint: 'Fonte de energia do celular' },
   { word: 'ALGORITMO', hint: 'Sequência lógica de instruções' },

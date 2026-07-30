@@ -65,6 +65,10 @@ import { handleInfoCommand } from './commands/info/info.js';
 import { handleBotinfoCommand } from './commands/info/botinfo.js';
 import { handleGrupoCommand } from './commands/info/grupo.js';
 
+// Módulos do Sistema de Interação Inteligente
+import { AutoReply } from './interaction/AutoReply.js';
+import { conversationMemory } from './interaction/ConversationMemory.js';
+
 dotenv.config();
 const prefix = process.env.PREFIX || '/';
 
@@ -250,7 +254,21 @@ export async function handleMessages(sock, msg) {
     }
   }
 
-  if (!body.startsWith(prefix)) return;
+  if (!body.startsWith(prefix)) {
+    // Processar resposta automática/menção/saudação espontânea e memória
+    await AutoReply.processMessage(sock, msg, body);
+    return;
+  }
+
+  // Se for um comando, registra também na memória de conversa
+  conversationMemory.addMessage(from, {
+    id: msg.key.id,
+    sender,
+    senderName: msg.pushName || sender.split('@')[0],
+    text: body,
+    timestamp: msg.messageTimestamp,
+    isBot: false
+  });
 
   const args = body.slice(prefix.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();

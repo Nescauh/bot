@@ -33,6 +33,7 @@ import { handlePptCommand } from './commands/fun/ppt.js';
 import { handleRoletaCommand } from './commands/fun/roleta.js';
 import { handleQuizCommand, activeQuizGames, processQuizAnswer } from './commands/fun/quiz.js';
 import { handleForcaCommand, activeForcaGames, processForcaGuess } from './commands/fun/forca.js';
+import { handleTaroCommand } from './commands/fun/taro.js';
 
 import { handleDailyCommand } from './commands/economy/daily.js';
 import { handleSaldoCommand } from './commands/economy/saldo.js';
@@ -313,13 +314,14 @@ export async function handleMessages(sock, msg) {
                        `「 📋 」/warnings - ver advertências do membro\n\n` +
                        `🎮 *DIVERSÃO*\n` +
                        `「 👩‍❤️‍👨 」/ship - medir afinidade de casal\n` +
-                       `「 🎱 」/8ball - bola 8 mágica de perguntas\n` +
+                       `「 🎱 」/8ball - bola 8 mágica de perguntas (IA)\n` +
                        `「 🎲 」/dado - rolar dado (1 a 6)\n` +
                        `「 🪙 」/caraoucoroa - cara ou coroa\n` +
                        `「 🎮 」/ppt - pedra, papel e tesoura\n` +
-                       `「 💥 」/roleta - roleta russa\n` +
-                       `「 🧠 」/quiz - quiz de conhecimentos gerais\n` +
-                       `「 🎯 」/forca - jogo da forca\n\n` +
+                       `「 💥 」/roleta - roleta russa animada\n` +
+                       `「 🧠 」/quiz - quiz de conhecimentos gerais (IA)\n` +
+                       `「 🎯 」/forca - jogo da forca\n` +
+                       `「 🃏 」/tarô - leitura mística de Tarô com IA\n\n` +
                        `💰 *ECONOMIA*\n` +
                        `「 🎁 」/daily - resgatar recompensa diária\n` +
                        `「 💵 」/saldo - ver saldo da carteira e banco\n` +
@@ -388,6 +390,7 @@ export async function handleMessages(sock, msg) {
     else if (command === 'roleta') await handleRoletaCommand(sock, msg, sender);
     else if (command === 'quiz') await handleQuizCommand(sock, msg, args, sender);
     else if (command === 'forca') await handleForcaCommand(sock, msg, args, sender);
+    else if (['taro', 'tarot', 'tarô'].includes(command)) await handleTaroCommand(sock, msg, args);
     // 💰 Economia
     else if (command === 'daily') await handleDailyCommand(sock, msg, sender);
     else if (command === 'saldo') await handleSaldoCommand(sock, msg, sender, mentioned);

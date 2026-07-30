@@ -1,6 +1,7 @@
 import { getUser, updateUser } from '../../database/sqlite.js';
+import { askAi } from '../../utils/aiService.js';
 
-const quizQuestions = [
+const fallbackQuestions = [
   { question: 'Qual o maior planeta do Sistema Solar?', answer: 'júpiter', altAnswers: ['jupiter'], options: ['Terra', 'Júpiter', 'Saturno', 'Marte'] },
   { question: 'Qual elemento químico tem o símbolo Au?', answer: 'ouro', altAnswers: [], options: ['Prata', 'Cobre', 'Ouro', 'Alumínio'] },
   { question: 'Em que ano o homem pisou na Lua pela primeira vez?', answer: '1969', altAnswers: [], options: ['1965', '1969', '1972', '1959'] },
@@ -8,14 +9,14 @@ const quizQuestions = [
   { question: 'Quantos lados tem um heptágono?', answer: '7', altAnswers: ['sete'], options: ['5', '6', '7', '8'] },
   { question: 'Qual é o maior oceano do mundo?', answer: 'pacífico', altAnswers: ['pacifico'], options: ['Atlântico', 'Índico', 'Pacífico', 'Ártico'] },
   { question: 'Qual o animal terrestre mais rápido do mundo?', answer: 'guepardo', altAnswers: ['cheetah'], options: ['Leão', 'Guepardo', 'Gázela', 'Cavalo'] },
-  { question: 'Quem pintou a obra Monalisa?', answer: 'leonardo da vinci', altAnswers: ['da vinci', 'leonardo da vinci'], options: ['Picasso', 'Van Gogh', 'Da Vinci', 'Monet'] }
+  { question: 'Quem pintou a obra Monalisa?', answer: 'leonardo da vinci', altAnswers: ['da vinci'], options: ['Picasso', 'Van Gogh', 'Da Vinci', 'Monet'] }
 ];
 
 // Armazena quizzes ativos por chat: { [chatJid]: { question, answer, altAnswers, options } }
 export const activeQuizGames = new Map();
 
 function normalizeString(str) {
-  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  return str ? str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() : '';
 }
 
 export async function handleQuizCommand(sock, msg, args, sender) {
@@ -24,7 +25,7 @@ export async function handleQuizCommand(sock, msg, args, sender) {
 
   if (['reset', 'novo', 'reiniciar', 'cancelar'].includes(inputArg.toLowerCase())) {
     activeQuizGames.delete(from);
-    return startNewQuiz(sock, msg, from);
+    return startNewAiQuiz(sock, msg, from);
   }
 
   const activeQuiz = activeQuizGames.get(from);
@@ -39,15 +40,42 @@ export async function handleQuizCommand(sock, msg, args, sender) {
     const text = `🧠 *QUIZ EM ANDAMENTO*\n\n` +
                  `❓ *Pergunta:* ${activeQuiz.question}\n\n` +
                  `💡 *Opções:* ${activeQuiz.options.join(', ')}\n\n` +
-                 `👉 Digite a resposta correta no chat!`;
+                 `👉 *Digite a resposta correta no chat!*`;
     return sock.sendMessage(from, { text }, { quoted: msg });
   }
 
-  return startNewQuiz(sock, msg, from);
+  return startNewAiQuiz(sock, msg, from);
 }
 
-function startNewQuiz(sock, msg, from) {
-  const q = quizQuestions[Math.floor(Math.random() * quizQuestions.length)];
+async function generateAiQuestion() {
+  const systemInstruction = 'Você é um gerador de Quiz de conhecimentos gerais para um bot de WhatsApp. Sua tarefa é criar 1 pergunta inédita, curiosa e divertida com 4 opções de resposta (onde apenas 1 é a correta). Responda EXCLUSIVAMENTE em formato JSON estrito com as chaves: "pergunta" (string), "resposta" (string exata da opção correta), "opcoes" (array com exatamente 4 strings das alternativas). Não inclua crases de markdown nem qualquer outro texto além do JSON.';
+  const prompt = 'Gere 1 nova pergunta de quiz surpreendente sobre ciência, história, cinema, jogos, geografia ou cultura pop.';
+
+  try {
+    const rawAnswer = await askAi(prompt, systemInstruction);
+    const cleanJson = rawAnswer.replace(/```json/gi, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(cleanJson);
+
+    if (parsed.pergunta && parsed.resposta && Array.isArray(parsed.opcoes) && parsed.opcoes.length >= 4) {
+      return {
+        question: parsed.pergunta,
+        answer: parsed.resposta,
+        altAnswers: [],
+        options: parsed.opcoes.slice(0, 4)
+      };
+    }
+  } catch (err) {
+    console.warn('⚠️ Falha ao gerar pergunta do Quiz via IA, usando banco fallback:', err.message);
+  }
+
+  // Fallback se a IA falhar ou expirar
+  return fallbackQuestions[Math.floor(Math.random() * fallbackQuestions.length)];
+}
+
+async function startNewAiQuiz(sock, msg, from) {
+  await sock.sendMessage(from, { text: '🧠 *Gerando pergunta inédita com IA, aguarde...*' }, { quoted: msg });
+
+  const q = await generateAiQuestion();
 
   activeQuizGames.set(from, {
     question: q.question,
@@ -56,7 +84,7 @@ function startNewQuiz(sock, msg, from) {
     options: q.options
   });
 
-  const text = `🧠 *NOVO QUIZ RÁPIDO*\n\n` +
+  const text = `🧠 *QUIZ DE IA INÉDITO*\n\n` +
                `❓ *Pergunta:* ${q.question}\n\n` +
                `💡 *Opções:* ${q.options.join(', ')}\n\n` +
                `📌 *Responda diretamente no chat!* (+50 XP e +$200 de bônus!)`;
@@ -72,12 +100,16 @@ export async function processQuizAnswer(sock, msg, from, userResponse, sender) {
   const cleanAnswer = normalizeString(activeQuiz.answer);
   const cleanAlt = activeQuiz.altAnswers.map(a => normalizeString(a));
 
-  const isCorrect = cleanUser === cleanAnswer || cleanAlt.includes(cleanUser);
+  // Verifica se bate com a resposta inteira ou com uma das palavras-chave
+  const isCorrect = cleanUser === cleanAnswer || 
+                    cleanAlt.includes(cleanUser) || 
+                    (cleanAnswer.length > 3 && cleanUser.includes(cleanAnswer)) ||
+                    (cleanUser.length > 3 && cleanAnswer.includes(cleanUser));
 
   if (isCorrect) {
     activeQuizGames.delete(from);
 
-    // Recompensa o jogador com moedas e XP no SQLite
+    // Recompensa o jogador com moedas e XP no banco unificado
     const userObj = getUser(sender);
     const rewardCoins = 200;
     const rewardXp = 50;

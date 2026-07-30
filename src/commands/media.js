@@ -25,18 +25,20 @@ function convertWebpToPng(inputPath) {
   });
 }
 
-// Função para converter Vídeo em Figurinha Animada WebP
+// Função para converter Vídeo em Figurinha Animada WebP (Otimizado para WhatsApp Celular)
 function convertVideoToAnimatedSticker(inputPath) {
   const outputPath = path.join(os.tmpdir(), `anim-sticker-${Date.now()}.webp`);
   return new Promise((resolve, reject) => {
+    // Passagem 1: 512x512, fps=10, 6s de duração, qscale=45 (Tamanho leve para celular)
     const args = [
       '-y',
       '-i', inputPath,
       '-vcodec', 'libwebp',
-      '-filter_complex', '[0:v] scale=512:512:force_original_aspect_ratio=decrease,fps=12,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000',
+      '-filter_complex', '[0:v] scale=512:512:force_original_aspect_ratio=decrease,fps=10,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000',
       '-loop', '0',
       '-ss', '00:00:00',
-      '-t', '00:00:10',
+      '-t', '00:00:06',
+      '-qscale', '45',
       '-preset', 'default',
       '-an',
       '-vsync', '0',
@@ -47,6 +49,37 @@ function convertVideoToAnimatedSticker(inputPath) {
       try {
         const buffer = fs.readFileSync(outputPath);
         try { fs.unlinkSync(outputPath); } catch (_) {}
+
+        // Se por acaso exceder 480KB (limite em que o WhatsApp Mobile trava a animação), aplica passagem 2 mais leve
+        if (buffer.length > 490000) {
+          const pass2Path = path.join(os.tmpdir(), `anim-sticker-p2-${Date.now()}.webp`);
+          const pass2Args = [
+            '-y',
+            '-i', inputPath,
+            '-vcodec', 'libwebp',
+            '-filter_complex', '[0:v] scale=384:384:force_original_aspect_ratio=decrease,fps=8,pad=384:384:(ow-iw)/2:(oh-ih)/2:color=0x00000000',
+            '-loop', '0',
+            '-ss', '00:00:00',
+            '-t', '00:00:05',
+            '-qscale', '35',
+            '-preset', 'default',
+            '-an',
+            '-vsync', '0',
+            pass2Path
+          ];
+          execFile(ffmpegPath, pass2Args, (err2) => {
+            if (err2) return resolve(buffer);
+            try {
+              const buf2 = fs.readFileSync(pass2Path);
+              try { fs.unlinkSync(pass2Path); } catch (_) {}
+              resolve(buf2);
+            } catch (_) {
+              resolve(buffer);
+            }
+          });
+          return;
+        }
+
         resolve(buffer);
       } catch (e) {
         reject(e);

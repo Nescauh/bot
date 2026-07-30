@@ -5,43 +5,43 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-// Configuração das vozes disponíveis e seus filtros de áudio no FFMPEG
+// Configuração avançada das vozes com deslocamento de formantes (Rubberband), curva de frequência e cadência
 const VOICES = {
   bob: {
     name: 'Bob Esponja',
     channel: 'Nickelodeon Brasil',
     aliases: ['bob', 'esponja', 'bobesponja'],
-    filter: 'asetrate=44100*1.3,aresample=44100,atempo=1/1.3,equalizer=f=2000:g=5'
+    filter: 'rubberband=pitch=1.45:formant=shifted,equalizer=f=3000:width_type=h:width=1000:g=6,highpass=f=250'
   },
   xandao: {
     name: 'Super Xandão',
     channel: 'Super Xandão',
     aliases: ['xandao', 'xandão', 'superxandao', 'superxandão'],
-    filter: 'asetrate=44100*0.82,aresample=44100,atempo=1/0.82,equalizer=f=100:g=8'
+    filter: 'rubberband=pitch=0.76:formant=shifted,equalizer=f=90:width_type=h:width=150:g=10,compand=0.3|0.8:1|1:-90/-60|-60/-40|-40/-30|-20/-20|0/-10:6:0:-90:0.2,volume=1.3'
   },
   trezoitao: {
     name: 'Renato Trezoitão',
     channel: 'Renato Trezoitão',
     aliases: ['trezoitao', 'trezoitão', 'renato', '38'],
-    filter: 'asetrate=44100*0.85,aresample=44100,atempo=1/0.85,equalizer=f=120:g=6,aecho=0.8:0.88:20:0.3'
+    filter: 'rubberband=pitch=0.82:formant=shifted,equalizer=f=120:g=8,aecho=0.8:0.88:15:0.25,volume=1.2'
   },
   arthur: {
     name: 'Arthur do Val',
     channel: 'Mamãe Falei',
     aliases: ['arthur', 'mamaefalei', 'mamae'],
-    filter: 'asetrate=44100*1.05,aresample=44100,atempo=1.2,equalizer=f=2500:g=4'
+    filter: 'atempo=1.25,rubberband=pitch=1.06:formant=shifted,equalizer=f=2200:g=5'
   },
   eneias: {
     name: 'Doutor Enéias',
     channel: 'Doutor Enéias',
     aliases: ['eneias', 'enéias', 'dreneias', 'dr.eneias', '56'],
-    filter: 'asetrate=44100*0.9,aresample=44100,atempo=1.3,equalizer=f=1000:g=6'
+    filter: 'atempo=1.35,rubberband=pitch=0.92:formant=shifted,equalizer=f=1200:g=8,volume=1.4'
   },
   serjao: {
     name: 'Serjão dos Foguetes',
     channel: 'Ciência Sem Fim',
     aliases: ['serjao', 'serjão', 'sacani', 'foguetes'],
-    filter: 'asetrate=44100*0.88,aresample=44100,atempo=0.95,equalizer=f=150:g=6'
+    filter: 'atempo=0.94,rubberband=pitch=0.84:formant=shifted,equalizer=f=140:g=7,lowpass=f=4200'
   },
   padrao: {
     name: 'Padrão',
@@ -52,11 +52,11 @@ const VOICES = {
 };
 
 function getVoiceHelpText() {
-  return `🗣️ *VOZES DISPONÍVEIS NO COMANDO /tts* 🗣️\n\n` +
+  return `🗣️ *VOZES PERSONALIZADAS DOS PERSONAGENS (/tts)* 🗣️\n\n` +
          `*Como usar:*\n` +
-         `• \`/tts <voz> <texto>\` — fala com a voz escolhida\n` +
+         `• \`/tts <voz> <texto>\` — fala com a voz clonada do personagem\n` +
          `• \`/tts <texto>\` — fala com a voz padrão\n\n` +
-         `🎙️ *Lista de Vozes:* \n` +
+         `🎙️ *Lista de Personagens Disponíveis:* \n` +
          `1️⃣ *bob* — Bob Esponja (Nickelodeon Brasil)\n` +
          `2️⃣ *xandao* — Super Xandão (Super Xandão)\n` +
          `3️⃣ *trezoitao* — Renato Trezoitão (Renato Trezoitão)\n` +
@@ -95,7 +95,7 @@ function convertMp3ToOggOpus(buffer, filter = null) {
 
     execFile(ffmpegPath, args, (err) => {
       if (err) {
-        // Fallback simples se o filtro falhar
+        // Fallback se o filtro falhar
         const fallbackArgs = ['-y', '-i', tmpInput, '-ac', '1', tmpOutput];
         execFile(ffmpegPath, fallbackArgs, (err2) => {
           try { fs.unlinkSync(tmpInput); } catch (_) {}

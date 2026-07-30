@@ -1,3 +1,5 @@
+import path from 'path';
+import fs from 'fs';
 import { handleSocialCommands } from './commands/social.js';
 import { handleAdminCommands } from './commands/admin.js';
 import { handleMediaCommands } from './commands/media.js';

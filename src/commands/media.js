@@ -225,14 +225,21 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
 
     case 'ver': {
       // Verificar se é o dono ou se está na lista de autorizados
-      const isOwner = checkIfOwner(sender);
-      const isAuthorized = db.autorizadosVer.includes(sender);
+      const isOwner = checkIfOwner(sender, msg);
+      const isAuthorized = db.autorizadosVer?.includes(sender);
 
       if (!isOwner && !isAuthorized) {
         return reply('⚠️ Você não tem permissão para usar este comando.');
       }
 
-      const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+      const contextInfo = msg.message?.extendedTextMessage?.contextInfo ||
+                          msg.message?.imageMessage?.contextInfo ||
+                          msg.message?.videoMessage?.contextInfo || {};
+
+      const quoted = contextInfo?.quotedMessage || 
+                     msg.message?.viewOnceMessageV2?.message || 
+                     msg.message?.viewOnceMessage?.message;
+
       let viewOnceContent = null;
       let mediaType = null;
 
@@ -243,16 +250,22 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
         } else if (quoted.viewOnceMessageV2?.message?.videoMessage) {
           viewOnceContent = quoted.viewOnceMessageV2.message.videoMessage;
           mediaType = 'video';
+        } else if (quoted.viewOnceMessageV2Extension?.message?.imageMessage) {
+          viewOnceContent = quoted.viewOnceMessageV2Extension.message.imageMessage;
+          mediaType = 'image';
+        } else if (quoted.viewOnceMessageV2Extension?.message?.videoMessage) {
+          viewOnceContent = quoted.viewOnceMessageV2Extension.message.videoMessage;
+          mediaType = 'video';
         } else if (quoted.viewOnceMessage?.message?.imageMessage) {
           viewOnceContent = quoted.viewOnceMessage.message.imageMessage;
           mediaType = 'image';
         } else if (quoted.viewOnceMessage?.message?.videoMessage) {
           viewOnceContent = quoted.viewOnceMessage.message.videoMessage;
           mediaType = 'video';
-        } else if (quoted.imageMessage?.viewOnce) {
+        } else if (quoted.imageMessage) {
           viewOnceContent = quoted.imageMessage;
           mediaType = 'image';
-        } else if (quoted.videoMessage?.viewOnce) {
+        } else if (quoted.videoMessage) {
           viewOnceContent = quoted.videoMessage;
           mediaType = 'video';
         }
@@ -269,11 +282,14 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
         if (mediaType === 'image') cleanQuoted.imageMessage = viewOnceContent;
         if (mediaType === 'video') cleanQuoted.videoMessage = viewOnceContent;
 
+        const stanzaId = contextInfo.stanzaId || msg.key.id;
+        const participant = contextInfo.participant || sender;
+
         const simulatedMsg = {
           key: {
             remoteJid: from,
-            id: msg.message.extendedTextMessage.contextInfo.stanzaId,
-            participant: msg.message.extendedTextMessage.contextInfo.participant
+            id: stanzaId,
+            participant: participant
           },
           message: cleanQuoted
         };
@@ -287,7 +303,7 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
         }
 
         // Deleta arquivo temporário
-        fs.unlinkSync(filePath);
+        try { fs.unlinkSync(filePath); } catch (_) {}
       } catch (error) {
         console.error('Erro ao revelar visualização única:', error);
         return reply('⚠️ Erro ao tentar baixar e revelar a mídia.');

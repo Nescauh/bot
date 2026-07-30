@@ -14,7 +14,10 @@ export function checkIfOwner(sender, msg = null) {
   const cleanSender = sender.split('@')[0].split(':')[0].replace(/\D/g, '');
   if (!cleanSender) return false;
 
-  if (ownerList.length === 0) return true; // Se não houver lista definida, por segurança permite apenas se for do próprio bot
+  // Se não houver lista no .env, permite APENAS se a mensagem for enviada do próprio número do bot
+  if (ownerList.length === 0) {
+    return msg?.key?.fromMe === true;
+  }
 
   const sender8 = cleanSender.slice(-8);
 

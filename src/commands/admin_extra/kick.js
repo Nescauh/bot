@@ -32,8 +32,11 @@ export async function handleKickCommand(sock, msg, args, sender, mentioned) {
   }
 
   try {
+    if (isAdmin(participants, target)) {
+      await sock.groupParticipantsUpdate(from, [target], 'demote');
+    }
     await sock.groupParticipantsUpdate(from, [target], 'remove');
-    return sock.sendMessage(from, { text: `🚪 @${target.split('@')[0]} foi expulsor do grupo.`, mentions: [target] }, { quoted: msg });
+    return sock.sendMessage(from, { text: `🚪 @${target.split('@')[0]} foi expulso do grupo.`, mentions: [target] }, { quoted: msg });
   } catch (err) {
     return sock.sendMessage(from, { text: '⚠️ Não foi possível remover o participante.' }, { quoted: msg });
   }

@@ -28,15 +28,20 @@ export async function handleWarnCommand(sock, msg, args, sender, mentioned) {
 
   if (count >= MAX_WARNS) {
     resetWarns(from, target);
-    const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+    const botJid = sock.user?.id || '';
     if (isAdmin(participants, botJid)) {
       try {
+        if (isAdmin(participants, target)) {
+          await sock.groupParticipantsUpdate(from, [target], 'demote');
+        }
         await sock.groupParticipantsUpdate(from, [target], 'remove');
         return sock.sendMessage(from, { 
-          text: `⚠️ @${target.split('@')[0]} atingiu ${MAX_WARNS}/${MAX_WARNS} advertências e foi banido do grupo!`,
+          text: `⚠️ @${target.split('@')[0]} atingiu ${MAX_WARNS}/${MAX_WARNS} advertências e foi removido do grupo!`,
           mentions: [target]
         }, { quoted: msg });
-      } catch (_) {}
+      } catch (err) {
+        console.error('Erro ao remover membro com max advertências:', err);
+      }
     }
     return sock.sendMessage(from, { 
       text: `⚠️ @${target.split('@')[0]} atingiu ${MAX_WARNS}/${MAX_WARNS} advertências! (Não tenho permissão de adm para remover).`,

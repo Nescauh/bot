@@ -169,16 +169,35 @@ export async function handleMessages(sock, msg) {
 
   cacheMessage(from, msg);
 
-  // Extrair texto da mensagem
+  // Extrair texto da mensagem (suporte total a mensagens temporárias/PV, viewOnce e legendas de mídia)
+  let messageObj = msg.message;
+  if (messageObj?.ephemeralMessage?.message) messageObj = messageObj.ephemeralMessage.message;
+  if (messageObj?.viewOnceMessage?.message) messageObj = messageObj.viewOnceMessage.message;
+  if (messageObj?.viewOnceMessageV2?.message) messageObj = messageObj.viewOnceMessageV2.message;
+  if (messageObj?.documentWithCaptionMessage?.message) messageObj = messageObj.documentWithCaptionMessage.message;
+
   let body = '';
-  if (msg.message?.conversation) {
-    body = msg.message.conversation;
-  } else if (msg.message?.extendedTextMessage?.text) {
-    body = msg.message.extendedTextMessage.text;
-  } else if (msg.message?.imageMessage?.caption) {
-    body = msg.message.imageMessage.caption;
-  } else if (msg.message?.videoMessage?.caption) {
-    body = msg.message.videoMessage.caption;
+  if (messageObj?.conversation) {
+    body = messageObj.conversation;
+  } else if (messageObj?.extendedTextMessage?.text) {
+    body = messageObj.extendedTextMessage.text;
+  } else if (messageObj?.imageMessage?.caption) {
+    body = messageObj.imageMessage.caption;
+  } else if (messageObj?.videoMessage?.caption) {
+    body = messageObj.videoMessage.caption;
+  } else if (messageObj?.documentMessage?.caption) {
+    body = messageObj.documentMessage.caption;
+  } else if (messageObj?.buttonsResponseMessage?.selectedButtonId) {
+    body = messageObj.buttonsResponseMessage.selectedButtonId;
+  } else if (messageObj?.listResponseMessage?.singleSelectReply?.selectedRowId) {
+    body = messageObj.listResponseMessage.singleSelectReply.selectedRowId;
+  } else if (messageObj?.templateButtonReplyMessage?.selectedId) {
+    body = messageObj.templateButtonReplyMessage.selectedId;
+  }
+
+  // Permitir que o usuário no privado digite "menu" ou "help" mesmo sem a barra "/"
+  if (!isGroup && body && ['menu', 'help', 'ajuda'].includes(body.toLowerCase().trim())) {
+    body = prefix + 'menu';
   }
 
   // Ignorar mensagens enviadas pelo próprio bot, a menos que sejam comandos iniciados pelo prefixo
@@ -307,6 +326,16 @@ export async function handleMessages(sock, msg) {
                        `「 👤 」/perfil - ver status de casamento\n` +
                        `「 🏳️‍🌈 」/gay - procentagem\n` +
                        `「 💖 」/romance - Compatibilidade\n` +
+                       `「 🐂 」/corno - teste de corno\n` +
+                       `「 👹 」/feio - medidor de feiura\n` +
+                       `「 🔥 」/gostoso - medidor de gostosura\n` +
+                       `「 🍺 」/bebado - nível de embriaguez\n` +
+                       `「 🙄 」/chato - medidor de chatice\n` +
+                       `「 🍀 」/sortudo - medidor de sorte\n` +
+                       `「 💋 」/beijo - dar um beijo em alguém\n` +
+                       `「 🖐️ 」/tapa - dar um tapa em alguém\n` +
+                       `「 🥛 」/mamada - mamada em alguém\n` +
+                       `「 💦 」/gozar - expressar pura emoção\n` +
                        `「 🔨 」/ban - remover alguém do grupo (admin)\n` +
                        `「 👁️ 」/ver - revelar mídia de visualização única\n` +
                        `「 🔑 」/adm - autorizar alguém a usar /ver (dono)\n` +
@@ -340,19 +369,19 @@ export async function handleMessages(sock, msg) {
                        `「 🧠 」/quiz - quiz de conhecimentos gerais (IA)\n` +
                        `「 🎯 」/forca - jogo da forca\n` +
                        `「 🃏 」/tarô - leitura mística de Tarô com IA\n\n` +
-                       `💰 *ECONOMIA*\n` +
-                       `「 🎁 」/daily - resgatar recompensa diária\n` +
-                       `「 💵 」/saldo - ver saldo da carteira e banco\n` +
-                       `「 💼 」/trabalhar - trabalhar para ganhar moedas\n` +
-                       `「 💸 」/transferir - transferir moedas para outro membro\n` +
-                       `「 🏪 」/loja - ver itens disponíveis na loja\n` +
-                       `「 🛒 」/comprar - comprar item da loja\n` +
-                       `「 🎒 」/inventario - ver seus itens comprados\n` +
-                       `「 🏆 」/ranking - top membros mais ricos\n\n` +
-                       `⭐ *SISTEMA DE XP*\n` +
-                       `「 🎖️ 」/level - ver seu nível e XP atual\n` +
-                       `「 📇 」/rank - cartão de status do perfil\n` +
-                       `「 🌟 」/top - ranking dos maiores níveis\n\n` +
+                       `💰 *ECONOMIA & OSTENTAÇÃO*\n` +
+                       `「 🎁 」/daily - recompensa diária com combo + Biscoito da Sorte (IA)\n` +
+                       `「 💵 」/saldo - extrato de carteira, banco e status ostentação\n` +
+                       `「 💼 」/trabalhar - turnos de trabalho dinâmicos com IA (+Moedas & XP)\n` +
+                       `「 💸 」/transferir - enviar Pix para outro membro com comprovante\n` +
+                       `「 🏪 」/loja - catálogo de itens RPG e carros de luxo\n` +
+                       `「 🛒 」/comprar - adquirir itens para sua coleção\n` +
+                       `「 🎒 」/inventario - itens comprados + avaliação de colecionador (IA)\n` +
+                       `「 🏆 」/ranking - top membros mais ricos (Forbes Bot)\n\n` +
+                       `⭐ *SISTEMA DE XP & PATENTES RPG*\n` +
+                       `「 🎖️ 」/level - nível atual, XP e barra de progresso com Patente RPG\n` +
+                       `「 📇 」/rank - cartão completo de perfil RPG + lema do guerreiro (IA)\n` +
+                       `「 🌟 」/top - hall da fama das maiores lendas do grupo\n\n` +
                        `🛠 *UTILIDADES*\n` +
                        `「 🌤️ 」/clima - previsão do tempo por cidade\n` +
                        `「 🔢 」/calculadora - calcular expressões matemáticas\n` +
@@ -375,7 +404,7 @@ export async function handleMessages(sock, msg) {
        }
     }
     // Comandos Sociais Legados
-    else if (['casar', 'aceitar', 'recusar', 'divorcio', 'perfil', 'gay', 'romance'].includes(command)) {
+    else if (['casar', 'aceitar', 'recusar', 'divorcio', 'perfil', 'gay', 'romance', 'corno', 'feio', 'gostoso', 'bebado', 'chato', 'sortudo', 'beijo', 'tapa', 'mamada', 'gozar'].includes(command)) {
       await handleSocialCommands(sock, msg, command, args, sender, mentioned);
     } 
     // Comandos de Administração Legados

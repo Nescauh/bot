@@ -1,51 +1,23 @@
-import fs from 'fs';
-import path from 'path';
+import { getStore, saveStore } from './database/sqlite.js';
 
-const DB_PATH = path.resolve('database.json');
-
-let db = {
-  casamentos: {},
-  pedidosCasamento: {},
-  autorizadosVer: [],
-  configGrupos: {}
-};
-
-// Carrega o banco de dados
+// Carrega o banco de dados unificado
 export function loadDatabase() {
-  try {
-    if (fs.existsSync(DB_PATH)) {
-      const data = fs.readFileSync(DB_PATH, 'utf-8');
-      db = JSON.parse(data);
-      
-      // Garantir que a estrutura básica exista
-      db.casamentos = db.casamentos || {};
-      db.pedidosCasamento = db.pedidosCasamento || {};
-      db.autorizadosVer = db.autorizadosVer || [];
-      db.configGrupos = db.configGrupos || {};
-    } else {
-      saveDatabase();
-    }
-  } catch (error) {
-    console.error('Erro ao carregar o banco de dados:', error);
-  }
+  getStore();
 }
 
-// Salva o banco de dados
+// Salva o banco de dados unificado sem apagar os usuários
 export function saveDatabase() {
-  try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2), 'utf-8');
-  } catch (error) {
-    console.error('Erro ao salvar o banco de dados:', error);
-  }
+  saveStore();
 }
 
-// Retorna a instância do banco de dados
+// Retorna a instância completa do banco de dados unificado
 export function getDatabase() {
-  return db;
+  return getStore();
 }
 
-// Atualiza o banco de dados de forma segura
+// Atualiza o banco de dados de forma segura preservando todas as propriedades existentes
 export function updateDatabase(fn) {
+  const db = getStore();
   fn(db);
-  saveDatabase();
+  saveStore();
 }

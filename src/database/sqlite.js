@@ -8,7 +8,7 @@ const FALLBACK_JSON_PATH = path.resolve('database.json');
 let dbInstance = null;
 let memoryStore = null;
 
-function getStore() {
+export function getStore() {
   if (memoryStore) return memoryStore;
 
   if (fs.existsSync(FALLBACK_JSON_PATH)) {
@@ -33,7 +33,7 @@ function getStore() {
   return memoryStore;
 }
 
-function saveStore() {
+export function saveStore() {
   if (!memoryStore) return;
   try {
     fs.writeFileSync(FALLBACK_JSON_PATH, JSON.stringify(memoryStore, null, 2), 'utf-8');
@@ -73,6 +73,7 @@ export async function initSqlite() {
         level INTEGER DEFAULT 1,
         last_daily INTEGER DEFAULT 0,
         last_work INTEGER DEFAULT 0,
+        daily_streak INTEGER DEFAULT 0,
         inventory TEXT DEFAULT '[]'
       );
 
@@ -100,6 +101,11 @@ export async function initSqlite() {
       );
     `);
 
+    // Tenta adicionar novas colunas dinâmicas se já não existirem
+    try {
+      dbInstance.run('ALTER TABLE users ADD COLUMN daily_streak INTEGER DEFAULT 0');
+    } catch (_) {}
+
     // Hidrata o memoryStore com os dados do SQLite existentes no arquivo
     const store = getStore();
     
@@ -111,7 +117,11 @@ export async function initSqlite() {
           const userObj = {};
           columns.forEach((col, idx) => userObj[col] = row[idx]);
           if (userObj.jid) {
-            store.users[userObj.jid] = userObj;
+            // Preserva dados de memoryStore se já existirem e forem mais atualizados
+            store.users[userObj.jid] = {
+              ...userObj,
+              ...(store.users[userObj.jid] || {})
+            };
           }
         });
       }
@@ -197,12 +207,13 @@ export function getUser(jid) {
         level: 1,
         last_daily: 0,
         last_work: 0,
+        daily_streak: 0,
         inventory: '[]'
       };
       if (dbInstance) {
         try {
           dbInstance.run(
-            'INSERT OR IGNORE INTO users (jid, wallet, bank, xp, level, last_daily, last_work, inventory) VALUES (?, 0, 0, 0, 1, 0, 0, "[]")',
+            'INSERT OR IGNORE INTO users (jid, wallet, bank, xp, level, last_daily, last_work, daily_streak, inventory) VALUES (?, 0, 0, 0, 1, 0, 0, 0, "[]")',
             [jid]
           );
         } catch (_) {}
@@ -211,7 +222,18 @@ export function getUser(jid) {
     saveStore();
     saveSqliteFile();
   }
-  return store.users[jid];
+
+  const u = store.users[jid];
+  u.wallet = Number(u.wallet) || 0;
+  u.bank = Number(u.bank) || 0;
+  u.xp = Number(u.xp) || 0;
+  u.level = Number(u.level) || 1;
+  u.last_daily = Number(u.last_daily) || 0;
+  u.last_work = Number(u.last_work) || 0;
+  u.daily_streak = Number(u.daily_streak) || 0;
+  u.inventory = u.inventory || '[]';
+
+  return u;
 }
 
 export function updateUser(jid, updates) {
@@ -226,27 +248,33 @@ export function updateUser(jid, updates) {
       const fields = [];
       const values = [];
       for (const [key, val] of Object.entries(updates)) {
+        try {
+          dbInstance.run(`ALTER TABLE users ADD COLUMN ${key} TEXT`);
+        } catch (_) {}
+
         fields.push(`${key} = ?`);
         values.push(typeof val === 'object' ? JSON.stringify(val) : val);
       }
       values.push(jid);
       dbInstance.run(`UPDATE users SET ${fields.join(', ')} WHERE jid = ?`, values);
       saveSqliteFile();
-    } catch (_) {}
+    } catch (err) {
+      console.error('Erro ao atualizar usuário no SQLite:', err);
+    }
   }
 }
 
 export function getTopUsersByWallet(limit = 10) {
   const store = getStore();
   const list = Object.values(store.users);
-  list.sort((a, b) => (b.wallet + b.bank) - (a.wallet + a.bank));
+  list.sort((a, b) => (Number(b.wallet || 0) + Number(b.bank || 0)) - (Number(a.wallet || 0) + Number(a.bank || 0)));
   return list.slice(0, limit);
 }
 
 export function getTopUsersByXP(limit = 10) {
   const store = getStore();
   const list = Object.values(store.users);
-  list.sort((a, b) => b.xp - a.xp);
+  list.sort((a, b) => Number(b.xp || 0) - Number(a.xp || 0));
   return list.slice(0, limit);
 }
 

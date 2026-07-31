@@ -1,34 +1,68 @@
 import { getUser, updateUser } from '../../database/sqlite.js';
+import { askAi } from '../../utils/aiService.js';
 
-const jobs = [
-  'desenvolveu um bot para WhatsApp',
-  'entregou pizzas pela cidade',
-  'formatou o computador do vizinho',
-  'vendeu pães de queijo na feira',
-  'trabalhou como motorista de aplicativo',
-  'prestou consultoria de TI'
+const fallbackJobs = [
+  'desenvolveu um bot secreto para o WhatsApp de uma grande empresa',
+  'entregou pizzas voadoras de moto no trânsito caótico da cidade',
+  'formatou o computador do vizinho e apagou os vírus acidentalmente',
+  'vendeu pães de queijo gourmet na feira livre e o estoque esgotou',
+  'trabalhou como motorista de aplicativo e levou um famoso no carro',
+  'prestou consultoria de TI e resolveu o problema tirando o cabo da tomada',
+  'treinou uma capivara para fazer entregas de iFood no centro',
+  'venceu um campeonato de e-sports de jogo da velha'
 ];
 
 export async function handleTrabalharCommand(sock, msg, sender) {
   const from = msg.key.remoteJid;
   const user = getUser(sender);
   const now = Date.now();
-  const COOLDOWN = 60 * 60 * 1000; // 1 hora
+  const COOLDOWN = 30 * 60 * 1000; // Cooldown reduzido para 30 minutos!
 
   if (now - user.last_work < COOLDOWN) {
     const remaining = COOLDOWN - (now - user.last_work);
     const minutes = Math.floor(remaining / (1000 * 60));
-    return sock.sendMessage(from, { text: `⏳ Você está cansado! Aguarde mais *${minutes} minutos* para trabalhar novamente.` }, { quoted: msg });
+    const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+    return sock.sendMessage(from, { text: `⏳ *VOCÊ ESTÁ CANSADO!*\n\nSeus músculos precisam de descanso! Aguarde *${minutes}m ${seconds}s* para pegar outro turno de trabalho.` }, { quoted: msg });
   }
 
-  const earned = Math.floor(Math.random() * 300) + 150;
-  const job = jobs[Math.floor(Math.random() * jobs.length)];
-  const newWallet = user.wallet + earned;
+  const earnedCoins = Math.floor(Math.random() * 350) + 150; // $150 a $500
+  const earnedXp = Math.floor(Math.random() * 30) + 20; // 20 a 50 XP
+
+  let jobStory = '';
+  try {
+    const systemInstruction = 'Você é um gerador de relatos de trabalho engraçados para um bot de WhatsApp. Crie 1 frase curta (máximo 15 palavras) bem humorada e inusitada sobre um trabalho que o usuário acabou de realizar no Brasil. Não use aspas.';
+    const prompt = 'Gere 1 história curta e hilária de trabalho inusitado que deu super certo.';
+    const aiRes = await askAi(prompt, systemInstruction);
+    if (aiRes) jobStory = aiRes.trim().replace(/^["']|["']$/g, '');
+  } catch (_) {}
+
+  if (!jobStory) {
+    jobStory = fallbackJobs[Math.floor(Math.random() * fallbackJobs.length)];
+  }
+
+  const newWallet = user.wallet + earnedCoins;
+  const newXp = user.xp + earnedXp;
+  const nextLevelXp = Math.pow(user.level, 2) * 50;
+  let newLevel = user.level;
+  let levelUpMsg = '';
+
+  if (newXp >= nextLevelXp) {
+    newLevel += 1;
+    levelUpMsg = `\n🎉 *LEVEL UP!* Você subiu para o *Nível ${newLevel}*! 🏆`;
+  }
 
   updateUser(sender, {
     wallet: newWallet,
+    xp: newXp,
+    level: newLevel,
     last_work: now
   });
 
-  return sock.sendMessage(from, { text: `💼 Você *${job}* e ganhou *$${earned}* moedas!\n💵 *Novo saldo:* *$${newWallet}*` }, { quoted: msg });
+  const text = `💼 *RELATÓRIO DE TRABALHO (IA)* 💼\n\n` +
+               `📖 *O que aconteceu:* Você ${jobStory}!\n\n` +
+               `💰 *Salário:* +$${earnedCoins} moedas\n` +
+               `✨ *Experiência:* +${earnedXp} XP\n` +
+               `💵 *Carteira Atual:* *$${newWallet}*${levelUpMsg}`;
+
+  return sock.sendMessage(from, { text }, { quoted: msg });
 }

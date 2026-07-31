@@ -161,6 +161,136 @@ export async function handleSocialCommands(sock, msg, command, args, sender, men
                    `Compatibilidade: *${pct}%*\n\n${msgRomance}`, [sender, target]);
     }
 
+    case 'corno': {
+      const target = mentioned[0] || sender;
+      const targetName = target.split('@')[0];
+      const pct = Math.floor(Math.random() * 101);
+      
+      let desc = 'Fiel e seguro(a)! 😇';
+      if (pct > 20) desc = 'Desconfie dos amigos próximos... 🤔';
+      if (pct > 50) desc = 'O chifre já tá rasgando o teto! 🐂';
+      if (pct > 80) desc = 'Rei/Rainha do gado! Precisa passar na porta de lado! 🐮👑';
+
+      return reply(`🐂 *TESTE DE CORNO*\n\n@${targetName} é *${pct}%* corno(a)!\nStatus: ${desc}`, [target]);
+    }
+
+    case 'feio': {
+      const target = mentioned[0] || sender;
+      const targetName = target.split('@')[0];
+      const pct = Math.floor(Math.random() * 101);
+      
+      let desc = 'Um colírio para os olhos! ✨';
+      if (pct > 20) desc = 'Passável se apagar a luz... 👀';
+      if (pct > 50) desc = 'Assusta até o espelho! 🪞💥';
+      if (pct > 80) desc = 'Só a mãe ama! Nível Shrek! 🧌';
+
+      return reply(`👹 *MEDIDOR DE FEIURA*\n\n@${targetName} é *${pct}%* feio(a)!\nStatus: ${desc}`, [target]);
+    }
+
+    case 'gostoso': {
+      const target = mentioned[0] || sender;
+      const targetName = target.split('@')[0];
+      const pct = Math.floor(Math.random() * 101);
+      
+      let desc = 'Precisa melhorar essa skin... 😅';
+      if (pct > 20) desc = 'Na média, dá pro gasto! 😉';
+      if (pct > 50) desc = 'Um espetáculo da natureza! 🔥';
+      if (pct > 80) desc = 'Modelo internacional! Perfeição pura! 💎🔥';
+
+      return reply(`🔥 *MEDIDOR DE GOSTOSURA*\n\n@${targetName} é *${pct}%* gostoso(a)!\nStatus: ${desc}`, [target]);
+    }
+
+    case 'bebado': {
+      const target = mentioned[0] || sender;
+      const targetName = target.split('@')[0];
+      const pct = Math.floor(Math.random() * 101);
+      
+      let desc = 'Sobriedade total, bebeu só água! 💧';
+      if (pct > 20) desc = 'Meio alegre, já tá falando alto! 🍻';
+      if (pct > 50) desc = 'Tropeçando nas pernas e mandando áudio pro ex! 🍺🥴';
+      if (pct > 80) desc = 'Perdeu a noção, abraçando o vaso sanitário! 🍾🤪';
+
+      return reply(`🍺 *MEDIDOR DE EMBRIAGUEZ*\n\n@${targetName} está *${pct}%* bêbado(a)!\nStatus: ${desc}`, [target]);
+    }
+
+    case 'chato': {
+      const target = mentioned[0] || sender;
+      const targetName = target.split('@')[0];
+      const pct = Math.floor(Math.random() * 101);
+      
+      let desc = 'Gente boa demais, um amor de pessoa! ❤️';
+      if (pct > 20) desc = 'Às vezes dá uma irritada, mas é suportável. 🥱';
+      if (pct > 50) desc = 'Insuportável! Ninguém aguenta 5 minutos de conversa! 🙄';
+      if (pct > 80) desc = 'Nível supremo de chatice! Nem o Bot aguenta! 🗣️❌';
+
+      return reply(`🙄 *MEDIDOR DE CHATICE*\n\n@${targetName} é *${pct}%* chato(a)!\nStatus: ${desc}`, [target]);
+    }
+
+    case 'sortudo': {
+      const target = mentioned[0] || sender;
+      const targetName = target.split('@')[0];
+      const pct = Math.floor(Math.random() * 101);
+      
+      let desc = 'A azaração em pessoa, se chover nescau o dente cai! ⚡';
+      if (pct > 20) desc = 'Sorte normal do dia a dia. 🍀';
+      if (pct > 50) desc = 'Hoje o dia tá para peixe! ✨';
+      if (pct > 80) desc = 'Ganhou na loteria da vida! Abençoado(a)! 🎰💎';
+
+      return reply(`🍀 *MEDIDOR DE SORTE*\n\n@${targetName} é *${pct}%* sortudo(a)!\nStatus: ${desc}`, [target]);
+    }
+
+    case 'beijo': {
+      if (!mentioned || mentioned.length === 0) {
+        return reply('⚠️ Você precisa marcar alguém para beijar! Exemplo: /beijo @marcar');
+      }
+
+      const target = mentioned[0];
+      if (target === sender) {
+        return reply('⚠️ Você tentou se beijar no espelho! 🪞💋');
+      }
+
+      return reply(`💋 @${sender.split('@')[0]} deu um beijo super carinhoso em @${target.split('@')[0]}! 😘❤️`, [sender, target]);
+    }
+
+    case 'tapa': {
+      if (!mentioned || mentioned.length === 0) {
+        return reply('⚠️ Você precisa marcar alguém para dar um tapa! Exemplo: /tapa @marcar');
+      }
+
+      const target = mentioned[0];
+      if (target === sender) {
+        return reply('⚠️ Você deu um tapa na própria cara! Por que fez isso?! 🤦‍♂️');
+      }
+
+      return reply(`🖐️💥 @${sender.split('@')[0]} deu um puta tapa estalado na cara de @${target.split('@')[0]}! 😱`, [sender, target]);
+    }
+
+    case 'mamada': {
+      if (!mentioned || mentioned.length === 0) {
+        return reply('⚠️ Você precisa marcar alguém! Exemplo: /mamada @marcar');
+      }
+
+      const target = mentioned[0];
+      if (target === sender) {
+        return reply('⚠️ Aí não né... contorcionismo?! 😳');
+      }
+
+      return reply(`🥛😳 @${sender.split('@')[0]} deu uma mamada caprichada em @${target.split('@')[0]}! Que isso papai! 🔥`, [sender, target]);
+    }
+
+    case 'gozar': {
+      if (!mentioned || mentioned.length === 0) {
+        return reply(`💦🤪 @${sender.split('@')[0]} não aguentou a emoção e gozou de felicidade! 🫣`, [sender]);
+      }
+
+      const target = mentioned[0];
+      if (target === sender) {
+        return reply(`💦🤪 @${sender.split('@')[0]} gozou sozinho(a) de tanta emoção! 🫣`, [sender]);
+      }
+
+      return reply(`💦🤪 @${sender.split('@')[0]} gozou de tanta emoção em cima de @${target.split('@')[0]}! 🫣`, [sender, target]);
+    }
+
     default:
       break;
   }

@@ -106,11 +106,14 @@ export async function handleAdminCommands(sock, msg, command, args, sender, ment
 
       // Banir o participante
       try {
+        if (isAdmin(participants, target)) {
+          await sock.groupParticipantsUpdate(from, [target], 'demote');
+        }
         await sock.groupParticipantsUpdate(from, [target], 'remove');
         return reply(`🔨 @${target.split('@')[0]} foi banido com sucesso.`, [target]);
       } catch (error) {
         console.error('Erro ao banir participante:', error);
-        return reply('⚠️ Erro ao tentar remover o participante. Talvez ele já tenha saído ou eu não tenha permissão.');
+        return reply('⚠️ Erro ao tentar remover o participante. Talvez ele seja o criador do grupo ou eu não tenha permissão.');
       }
     }
 

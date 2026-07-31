@@ -7,7 +7,7 @@ export async function handleTransferirCommand(sock, msg, args, sender, mentioned
   let amount = parseInt(args.find(arg => !isNaN(parseInt(arg)) && !arg.includes('@')));
 
   if (!target || isNaN(amount) || amount <= 0) {
-    return sock.sendMessage(from, { text: '⚠️ Uso correto: `/transferir @usuario <valor>`' }, { quoted: msg });
+    return sock.sendMessage(from, { text: '⚠️ *USO INCORRETO!*\n\nExemplo de uso: `/transferir @usuario 500`' }, { quoted: msg });
   }
 
   if (target === sender) {
@@ -16,7 +16,7 @@ export async function handleTransferirCommand(sock, msg, args, sender, mentioned
 
   const senderUser = getUser(sender);
   if (senderUser.wallet < amount) {
-    return sock.sendMessage(from, { text: `⚠️ Você não tem *$${amount}* na carteira. Saldo atual: *$${senderUser.wallet}*.` }, { quoted: msg });
+    return sock.sendMessage(from, { text: `⚠️ *SALDO INSUFICIENTE!*\n\nVocê não possui *$${amount}* moedas na carteira.\n💵 *Seu Saldo:* $${senderUser.wallet}` }, { quoted: msg });
   }
 
   const targetUser = getUser(target);
@@ -24,8 +24,15 @@ export async function handleTransferirCommand(sock, msg, args, sender, mentioned
   updateUser(sender, { wallet: senderUser.wallet - amount });
   updateUser(target, { wallet: targetUser.wallet + amount });
 
-  return sock.sendMessage(from, { 
-    text: `💸 *TRANSFERÊNCIA REALIZADA!*\n\nVocê transferiu *$${amount}* moedas para @${target.split('@')[0]}.`,
-    mentions: [target]
-  }, { quoted: msg });
+  const txId = Math.floor(Math.random() * 899999) + 100000;
+
+  const text = `💸 *COMPROVANTE DE TRANSFERÊNCIA PIX* 💸\n\n` +
+               `📤 *Remetente:* @${sender.split('@')[0]}\n` +
+               `📥 *Destinatário:* @${target.split('@')[0]}\n` +
+               `💰 *Valor Transferido:* *$${amount.toLocaleString('pt-BR')}* moedas\n` +
+               `📑 *Taxa de Transação:* R$ 0,00 (Grátis)\n` +
+               `🆔 *ID da Operação:* #${txId}\n\n` +
+               `✅ *Transação concluída com sucesso!*`;
+
+  return sock.sendMessage(from, { text, mentions: [sender, target] }, { quoted: msg });
 }

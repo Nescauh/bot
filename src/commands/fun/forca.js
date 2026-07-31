@@ -1,6 +1,7 @@
-// Módulo de Jogo da Forca com Estado Interativo
+// Módulo de Jogo da Forca com Geração Dinâmica de Palavras via IA
+import { askAi } from '../../utils/aiService.js';
 
-const wordsWithHints = [
+const fallbackWords = [
   { word: 'WHATSAPP', hint: 'Aplicativo de mensagens' },
   { word: 'TECNOLOGIA', hint: 'Ciência dos recursos computacionais' },
   { word: 'PROGRAMACAO', hint: 'Arte de escrever código' },
@@ -10,20 +11,86 @@ const wordsWithHints = [
   { word: 'ALGORITMO', hint: 'Sequência lógica de instruções' },
   { word: 'COMPUTADOR', hint: 'Máquina eletrônica de processamento de dados' },
   { word: 'INTERNET', hint: 'Rede mundial de computadores' },
-  { word: 'BRASIL', hint: 'País do futebol e do samba' },
-  { word: 'CHOCOLATE', hint: 'Doce feito a partir do cacau' },
-  { word: 'FUTEBOL', hint: 'Esporte mais popular do mundo' },
-  { word: 'PIZZA', hint: 'Prato tradicional italiano com queijo' },
-  { word: 'CELULAR', hint: 'Dispositivo móvel usado no dia a dia' },
-  { word: 'TELEVISAO', hint: 'Aparelho de transmissão de imagens e som' }
+  { word: 'ASTRONAUTA', hint: 'Viajante do espaço sideral' },
+  { word: 'GIRASSOL', hint: 'Planta que segue a luz do sol' },
+  { word: 'DINOSSAURO', hint: 'Réptil gigante pré-histórico' },
+  { word: 'ARQUITETURA', hint: 'Arte e técnica de projetar edificações' },
+  { word: 'VULCAO', hint: 'Montanha que expele lava e cinzas' },
+  { word: 'CACHOEIRA', hint: 'Queda d’água em um rio' },
+  { word: 'ESCORPIAO', hint: 'Aracnídeo venenoso com ferrão' },
+  { word: 'BIBLIOTECA', hint: 'Lugar repleto de livros' },
+  { word: 'TELESCOPIO', hint: 'Instrumento para observar as estrelas' },
+  { word: 'GALAXIA', hint: 'Grande sistema de estrelas e poeira' },
+  { word: 'PINGUIM', hint: 'Ave marinha que não voa e vive no frio' },
+  { word: 'HAMBURGUER', hint: 'Lanche popular com carne e pão' },
+  { word: 'MICROSCOPIO', hint: 'Aparelho para ver coisas minúsculas' },
+  { word: 'HELICOPTERO', hint: 'Aeronave que voa com hélices superiores' },
+  { word: 'CAMALEAO', hint: 'Réptil famoso por mudar de cor' },
+  { word: 'PIRATA', hint: 'Navegador fora-da-lei dos mares' },
+  { word: 'ESTRELA', hint: 'Corpo celeste reluzente no céu' },
+  { word: 'ORQUESTRA', hint: 'Conjunto de músicos com vários instrumentos' },
+  { word: 'LABIRINTO', hint: 'Conjunto de caminhos cruzados difícil de sair' },
+  { word: 'VAMPIRO', hint: 'Ser mitológico que se alimenta de sangue' },
+  { word: 'SUBMARINO', hint: 'Embarcação que navega debaixo da água' }
 ];
+
+// Conjunto para evitar repetições recentes de palavras
+const usedWords = new Set();
 
 // Armazena os jogos ativos por chat: { [chatJid]: { word, hint, guessedLetters: [], wrongAttempts, maxAttempts } }
 export const activeForcaGames = new Map();
 
-// Remove acentos para comparação
+// Remove acentos e caracteres especiais para comparação do jogo
 function normalizeString(str) {
-  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  if (!str) return '';
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+}
+
+// Gera palavra e dica inédita usando Inteligência Artificial (Groq / OpenAI / OpenRouter)
+async function generateAiForcaWord() {
+  const categories = ['animais', 'tecnologia', 'comidas', 'profissões', 'natureza', 'filmes e séries', 'objetos do dia a dia', 'geografia', 'ciência', 'esportes'];
+  const category = categories[Math.floor(Math.random() * categories.length)];
+
+  const systemInstruction = 'Você é um gerador de Palavras para o Jogo da Forca em um bot de WhatsApp. Sua tarefa é criar 1 palavra inédita, única e criativa em português do Brasil (apenas uma única palavra simples ou composta sem espaços nem hífen, entre 4 e 13 letras) acompanhada de uma dica direta e clara. Responda EXCLUSIVAMENTE em formato JSON estrito com as chaves: "palavra" (string maiúscula sem acentos) e "dica" (string). Não inclua marcas de markdown nem qualquer texto além do JSON.';
+  
+  const prompt = `Gere 1 palavra inédita em português do Brasil para o jogo da forca sobre o tema: ${category}.`;
+
+  try {
+    const rawAnswer = await askAi(prompt, systemInstruction);
+    const cleanJson = rawAnswer.replace(/```json/gi, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(cleanJson);
+
+    if (parsed.palavra && parsed.dica) {
+      let cleanWord = normalizeString(parsed.palavra.trim().split(/\s+/)[0]).replace(/[^A-Z]/g, '');
+      if (cleanWord.length >= 3 && cleanWord.length <= 15 && !usedWords.has(cleanWord)) {
+        usedWords.add(cleanWord);
+        if (usedWords.size > 100) usedWords.clear();
+        return {
+          word: cleanWord,
+          hint: parsed.dica.trim()
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Falha ao gerar palavra da forca com IA, utilizando banco fallback:', err.message);
+  }
+
+  // Fallback se a IA falhar ou expirar
+  const available = fallbackWords.filter(w => !usedWords.has(w.word));
+  const pool = available.length > 0 ? available : fallbackWords;
+  const randomObj = pool[Math.floor(Math.random() * pool.length)];
+  const cleanWord = normalizeString(randomObj.word).replace(/[^A-Z]/g, '');
+  
+  usedWords.add(cleanWord);
+  if (usedWords.size > 100) usedWords.clear();
+
+  return {
+    word: cleanWord,
+    hint: randomObj.hint
+  };
 }
 
 // Gera barra visual de vidas
@@ -46,7 +113,7 @@ export async function handleForcaCommand(sock, msg, args, sender) {
   const inputArg = args.join(' ').trim();
   const normalizedArg = normalizeString(inputArg);
 
-  // Se passou 'reset' ou 'novo', encerra o jogo atual se houver
+  // Se passou 'reset' ou 'novo', encerra o jogo atual se houver e inicia um novo
   if (['RESET', 'NOVO', 'REINICIAR', 'CANCELAR'].includes(normalizedArg)) {
     activeForcaGames.delete(from);
     return startNewForcaGame(sock, msg, from);
@@ -78,14 +145,15 @@ export async function handleForcaCommand(sock, msg, args, sender) {
   return sock.sendMessage(from, { text }, { quoted: msg });
 }
 
-// Inicia um novo jogo
-function startNewForcaGame(sock, msg, from) {
-  const randomObj = wordsWithHints[Math.floor(Math.random() * wordsWithHints.length)];
-  const normalizedWord = normalizeString(randomObj.word);
+// Inicia um novo jogo com IA
+export async function startNewForcaGame(sock, msg, from) {
+  await sock.sendMessage(from, { text: '🎯 *Gerando nova palavra secreta com IA, aguarde...*' }, { quoted: msg });
+
+  const gameData = await generateAiForcaWord();
 
   const game = {
-    word: normalizedWord,
-    hint: randomObj.hint,
+    word: gameData.word,
+    hint: gameData.hint,
     guessedLetters: [],
     wrongAttempts: 0,
     maxAttempts: 6
@@ -96,11 +164,11 @@ function startNewForcaGame(sock, msg, from) {
   const masked = renderMaskedWord(game.word, game.guessedLetters);
   const lives = renderHangingStatus(0, game.maxAttempts);
 
-  const text = `🎯 *NOVO JOGO DA FORCA INICIADO!*\n\n` +
+  const text = `🎯 *NOVO JOGO DA FORCA DE IA INICIADO!*\n\n` +
                `💡 *Dica:* ${game.hint}\n` +
-               `🔤 *Palavra:* \`${masked}\` (${normalizedWord.length} letras)\n\n` +
+               `🔤 *Palavra:* \`${masked}\` (${game.word.length} letras)\n\n` +
                `❤️ *Vidas:* ${lives}\n\n` +
-               `💬 *Como jogar:* Envie qualquer letra ou palpite no chat!`;
+               `💬 *Como jogar:* Envie qualquer letra ou palpite diretamente no chat!`;
 
   return sock.sendMessage(from, { text }, { quoted: msg });
 }
@@ -110,8 +178,8 @@ export async function processForcaGuess(sock, msg, from, guess, sender) {
   const game = activeForcaGames.get(from);
   if (!game) return false;
 
-  const cleanGuess = normalizeString(guess);
-  if (!cleanGuess || cleanGuess.startsWith('/')) return false;
+  const cleanGuess = normalizeString(guess).replace(/[^A-Z]/g, '');
+  if (!cleanGuess || guess.startsWith('/')) return false;
 
   // Se for apenas uma letra
   if (cleanGuess.length === 1) {

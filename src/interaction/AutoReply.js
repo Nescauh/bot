@@ -114,8 +114,8 @@ export class AutoReply {
       quotedParticipant.split('@')[0] === botNum
     );
 
-    // Se foi mencionado diretamente ou teve mensagem citada -> Resposta via IA com contexto total
-    if (isMentioned || isReplyingToBot) {
+    // Se for conversa privada (PV/DM) OU se foi mencionado diretamente ou teve mensagem citada -> Resposta via IA com contexto total
+    if (!isGroup || isMentioned || isReplyingToBot) {
       // Remove a tag @SubaruBot do prompt para não poluir
       const cleanPrompt = text.replace(/@subarubot/gi, '').trim() || 'Olá!';
 

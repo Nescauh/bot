@@ -70,9 +70,14 @@ function runYtDlpExecFile(args) {
   });
 }
 
-// Monta os argumentos base
-function buildBaseArgs(withCookies = true) {
-  const args = ['--no-playlist', '--js-runtimes', 'node'];
+// Monta os argumentos base para o yt-dlp ignorar bloqueios de robôs do YouTube
+function buildBaseArgs(withCookies = true, clientOverride = 'android,web') {
+  const args = [
+    '--no-playlist',
+    '--js-runtimes', 'node',
+    '--extractor-args', `youtube:player_client=${clientOverride}`,
+    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
+  ];
   
   if (ffmpegPath && fs.existsSync(ffmpegPath)) {
     args.push('--ffmpeg-location', ffmpegPath);
@@ -86,24 +91,37 @@ function buildBaseArgs(withCookies = true) {
   return args;
 }
 
-// Executa o download com retentativa (primeiro com cookies, depois sem cookies caso os cookies tenham expirado)
+// Executa o download com retentativas inteligentes (primeiro com cookies, depois clientes Android/iOS sem cookies, depois TV)
 async function downloadWithYtDlp(url, specificArgs) {
+  // Tentativa 1: Com cookies (se existirem) + cliente Android/Web
   try {
-    const argsWithCookies = [url, ...buildBaseArgs(true), ...specificArgs];
+    const argsWithCookies = [url, ...buildBaseArgs(true, 'android,web'), ...specificArgs];
     return await runYtDlpExecFile(argsWithCookies);
   } catch (firstError) {
-    console.warn('⚠️ Falha ao baixar com cookies (podem estar expirados). Tentando sem cookies...', firstError.message);
+    console.warn('⚠️ Falha no download com cookies/android. Tentando sem cookies usando cliente Android/iOS...', firstError.message);
+    
+    // Tentativa 2: Sem cookies + cliente Android/iOS
     try {
-      const argsWithoutCookies = [url, ...buildBaseArgs(false), ...specificArgs];
-      return await runYtDlpExecFile(argsWithoutCookies);
+      const argsNoCookiesAndroid = [url, ...buildBaseArgs(false, 'android,ios'), ...specificArgs];
+      return await runYtDlpExecFile(argsNoCookiesAndroid);
     } catch (secondError) {
-      console.warn('⚠️ Falha na execução direta do binário. Tentando via wrapper youtube-dl-exec...', secondError.message);
-      // Fallback final: tenta via pacote youtube-dl-exec padrão
-      return await ytdl(url, {
-        noPlaylist: true,
-        jsRuntimes: 'node',
-        ...(ffmpegPath && fs.existsSync(ffmpegPath) ? { ffmpegLocation: ffmpegPath } : {}),
-      });
+      console.warn('⚠️ Falha com cliente Android/iOS. Tentando cliente TV/Embedded...', secondError.message);
+      
+      // Tentativa 3: Sem cookies + cliente TV/Embedded
+      try {
+        const argsTv = [url, ...buildBaseArgs(false, 'tv_embedded,web'), ...specificArgs];
+        return await runYtDlpExecFile(argsTv);
+      } catch (thirdError) {
+        console.warn('⚠️ Falha com cliente TV. Tentando wrapper youtube-dl-exec...', thirdError.message);
+        
+        // Tentativa 4: Fallback final via wrapper youtube-dl-exec padrão
+        return await ytdl(url, {
+          noPlaylist: true,
+          jsRuntimes: 'node',
+          extractorArgs: 'youtube:player_client=android,web',
+          ...(ffmpegPath && fs.existsSync(ffmpegPath) ? { ffmpegLocation: ffmpegPath } : {}),
+        });
+      }
     }
   }
 }

@@ -70,10 +70,12 @@ function runYtDlpExecFile(args) {
   });
 }
 
-// Monta os argumentos base para o yt-dlp ignorar bloqueios de robôs do YouTube
-function buildBaseArgs(withCookies = true, clientOverride = 'android,web') {
+// Monta os argumentos base para o yt-dlp ignorar bloqueios de robôs do YouTube em servidores (Railway/Cloud)
+function buildBaseArgs(withCookies = false, clientOverride = 'ios,mweb,android,tv,web') {
   const args = [
     '--no-playlist',
+    '--force-ipv4',
+    '--geo-bypass',
     '--js-runtimes', 'node',
     '--extractor-args', `youtube:player_client=${clientOverride}`,
     '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
@@ -91,36 +93,45 @@ function buildBaseArgs(withCookies = true, clientOverride = 'android,web') {
   return args;
 }
 
-// Executa o download com retentativas inteligentes (primeiro com cookies, depois clientes Android/iOS sem cookies, depois TV)
+// Executa o download com retentativas inteligentes (prioriza requisição limpa sem cookies expirados no Railway)
 async function downloadWithYtDlp(url, specificArgs) {
-  // Tentativa 1: Com cookies (se existirem) + cliente Android/Web
+  // Tentativa 1: Limpo sem cookies + cliente iOS/mweb/Android/TV (Supera bloqueio de IP do Railway)
   try {
-    const argsWithCookies = [url, ...buildBaseArgs(true, 'android,web'), ...specificArgs];
-    return await runYtDlpExecFile(argsWithCookies);
+    const argsClean = [url, ...buildBaseArgs(false, 'ios,mweb,android,tv,web'), ...specificArgs];
+    return await runYtDlpExecFile(argsClean);
   } catch (firstError) {
-    console.warn('⚠️ Falha no download com cookies/android. Tentando sem cookies usando cliente Android/iOS...', firstError.message);
+    console.warn('⚠️ Falha 1 (sem cookies ios/mweb). Tentando cliente android,web sem cookies...', firstError.message);
     
-    // Tentativa 2: Sem cookies + cliente Android/iOS
+    // Tentativa 2: Sem cookies + cliente android,web
     try {
-      const argsNoCookiesAndroid = [url, ...buildBaseArgs(false, 'android,ios'), ...specificArgs];
-      return await runYtDlpExecFile(argsNoCookiesAndroid);
+      const argsAndroid = [url, ...buildBaseArgs(false, 'android,web'), ...specificArgs];
+      return await runYtDlpExecFile(argsAndroid);
     } catch (secondError) {
-      console.warn('⚠️ Falha com cliente Android/iOS. Tentando cliente TV/Embedded...', secondError.message);
+      console.warn('⚠️ Falha 2 (android,web). Tentando cliente tv_embedded...', secondError.message);
       
-      // Tentativa 3: Sem cookies + cliente TV/Embedded
+      // Tentativa 3: Sem cookies + cliente tv_embedded
       try {
         const argsTv = [url, ...buildBaseArgs(false, 'tv_embedded,web'), ...specificArgs];
         return await runYtDlpExecFile(argsTv);
       } catch (thirdError) {
-        console.warn('⚠️ Falha com cliente TV. Tentando wrapper youtube-dl-exec...', thirdError.message);
+        console.warn('⚠️ Falha 3 (tv_embedded). Tentando com cookies.txt como última alternativa...', thirdError.message);
         
-        // Tentativa 4: Fallback final via wrapper youtube-dl-exec padrão
-        return await ytdl(url, {
-          noPlaylist: true,
-          jsRuntimes: 'node',
-          extractorArgs: 'youtube:player_client=android,web',
-          ...(ffmpegPath && fs.existsSync(ffmpegPath) ? { ffmpegLocation: ffmpegPath } : {}),
-        });
+        // Tentativa 4: Com cookies.txt (se existir) como última tentativa
+        try {
+          const argsCookies = [url, ...buildBaseArgs(true, 'ios,mweb,android,web'), ...specificArgs];
+          return await runYtDlpExecFile(argsCookies);
+        } catch (fourthError) {
+          console.warn('⚠️ Falha 4 (cookies). Tentando wrapper ytdl...', fourthError.message);
+          
+          // Tentativa 5: Wrapper ytdl com extractor-args
+          return await ytdl(url, {
+            noPlaylist: true,
+            forceIpv4: true,
+            jsRuntimes: 'node',
+            extractorArgs: 'youtube:player_client=ios,mweb,android,web',
+            ...(ffmpegPath && fs.existsSync(ffmpegPath) ? { ffmpegLocation: ffmpegPath } : {}),
+          });
+        }
       }
     }
   }

@@ -72,7 +72,7 @@ function runYtDlpExecFile(args) {
 
 // Monta os argumentos base
 function buildBaseArgs(withCookies = true) {
-  const args = ['--no-playlist'];
+  const args = ['--no-playlist', '--js-runtimes', 'node'];
   
   if (ffmpegPath && fs.existsSync(ffmpegPath)) {
     args.push('--ffmpeg-location', ffmpegPath);
@@ -101,22 +101,64 @@ async function downloadWithYtDlp(url, specificArgs) {
       // Fallback final: tenta via pacote youtube-dl-exec padrão
       return await ytdl(url, {
         noPlaylist: true,
+        jsRuntimes: 'node',
         ...(ffmpegPath && fs.existsSync(ffmpegPath) ? { ffmpegLocation: ffmpegPath } : {}),
       });
     }
   }
 }
 
+// Extrai ID ou resolve URL / busca do YouTube
+async function resolveYoutubeInfo(query) {
+  const cleanQuery = query.trim();
+  const ytUrlRegex = /(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/|v\/|embed\/)|youtu\.be\/)([\w-]{11})/;
+  const match = cleanQuery.match(ytUrlRegex);
+
+  if (match && match[1]) {
+    const videoId = match[1];
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    try {
+      const videoDetails = await yts({ videoId });
+      if (videoDetails && videoDetails.title) {
+        return {
+          url,
+          title: videoDetails.title,
+          duration: videoDetails.timestamp || '',
+          views: videoDetails.views || 0,
+          author: videoDetails.author?.name || 'YouTube'
+        };
+      }
+    } catch (err) {
+      console.warn('⚠️ Não foi possível obter detalhes via yts para videoId:', videoId, err.message);
+    }
+    return {
+      url,
+      title: 'Áudio do YouTube',
+      duration: '',
+      views: 0,
+      author: 'YouTube'
+    };
+  }
+
+  // Busca por texto
+  const searchResult = await yts(cleanQuery);
+  const video = searchResult.videos ? searchResult.videos[0] : searchResult;
+  if (!video || !video.url) {
+    throw new Error('Nenhum vídeo encontrado para esta busca.');
+  }
+  return {
+    url: video.url,
+    title: video.title || cleanQuery,
+    duration: video.timestamp || '',
+    views: video.views || 0,
+    author: video.author?.name || 'YouTube'
+  };
+}
+
 // Busca e baixa áudio do YouTube
 export async function downloadYoutubeAudio(query) {
   try {
-    const searchResult = await yts(query);
-    const video = searchResult.videos ? searchResult.videos[0] : searchResult;
-    
-    if (!video || !video.url) {
-      throw new Error('Nenhum vídeo encontrado para esta busca.');
-    }
-
+    const info = await resolveYoutubeInfo(query);
     const tmpFile = path.join(os.tmpdir(), `yt-audio-${Date.now()}.mp3`);
 
     const specificArgs = [
@@ -126,15 +168,15 @@ export async function downloadYoutubeAudio(query) {
       '--output', tmpFile
     ];
 
-    await downloadWithYtDlp(video.url, specificArgs);
+    await downloadWithYtDlp(info.url, specificArgs);
 
     return {
       filePath: tmpFile,
-      title: video.title || query,
-      duration: video.timestamp || '',
-      views: video.views || 0,
-      author: video.author?.name || '',
-      url: video.url
+      title: info.title,
+      duration: info.duration,
+      views: info.views,
+      author: info.author,
+      url: info.url
     };
   } catch (error) {
     console.error('Erro no downloadYoutubeAudio:', error);
@@ -145,13 +187,7 @@ export async function downloadYoutubeAudio(query) {
 // Busca e baixa vídeo do YouTube
 export async function downloadYoutubeVideo(query) {
   try {
-    const searchResult = await yts(query);
-    const video = searchResult.videos ? searchResult.videos[0] : searchResult;
-    
-    if (!video || !video.url) {
-      throw new Error('Nenhum vídeo encontrado para esta busca.');
-    }
-
+    const info = await resolveYoutubeInfo(query);
     const tmpFile = path.join(os.tmpdir(), `yt-video-${Date.now()}.mp4`);
 
     const specificArgs = [
@@ -160,15 +196,15 @@ export async function downloadYoutubeVideo(query) {
       '--output', tmpFile
     ];
 
-    await downloadWithYtDlp(video.url, specificArgs);
+    await downloadWithYtDlp(info.url, specificArgs);
 
     return {
       filePath: tmpFile,
-      title: video.title || query,
-      duration: video.timestamp || '',
-      views: video.views || 0,
-      author: video.author?.name || '',
-      url: video.url
+      title: info.title,
+      duration: info.duration,
+      views: info.views,
+      author: info.author,
+      url: info.url
     };
   } catch (error) {
     console.error('Erro no downloadYoutubeVideo:', error);

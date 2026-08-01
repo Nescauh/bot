@@ -1,4 +1,16 @@
 import { getDatabase, updateDatabase } from '../database.js';
+import { getUser, updateUser } from '../database/sqlite.js';
+import { askAi } from '../utils/aiService.js';
+
+// Função auxiliar para gerar relatos engraçados de Brainrot com a IA
+async function getBrainrotAiStory(prompt) {
+  const sys = 'Você é um assistente de bot de WhatsApp zombadeiro especializado em gírias virais do TikTok/Brainrot (67, Sixen Seven, Betinha, Mogado/Mogging). Escreva 1 frase curta, sarcástica e hilária (máximo 20 palavras) sem aspas.';
+  try {
+    const res = await askAi(prompt, sys);
+    if (res) return res.trim().replace(/^["']|["']$/g, '');
+  } catch (_) {}
+  return null;
+}
 
 // Função auxiliar para formatar tempo de casamento
 function formatDuration(ms) {
@@ -289,6 +301,118 @@ export async function handleSocialCommands(sock, msg, command, args, sender, men
       }
 
       return reply(`💦🤪 @${sender.split('@')[0]} gozou de tanta emoção em cima de @${target.split('@')[0]}! 🫣`, [sender, target]);
+    }
+
+    case '67':
+    case 'six7':
+    case 'sixenseven':
+    case 'sixseven': {
+      const target = mentioned[0] || sender;
+      const targetName = target.split('@')[0];
+      const pct = Math.floor(Math.random() * 101);
+      const user = getUser(target);
+
+      let desc = 'Baixo nível de 67... O Betinha tá totalmente mogado! 📉🗿';
+      if (pct > 25) desc = '67 em andamento! A aura de Sixen Seven tá começando a bater... 🌀';
+      if (pct > 60) desc = 'Nível elevado de SIXEN SEVEN (67)! Aura do meme MOGANDO geral! ⚡🔥';
+      if (pct > 85) desc = '100% MAXIMUM SIXEN SEVEN! GOD OF 67 (NÃO SOBROU NADA PRO BETINHA)! 🤙👑🚀';
+
+      let aiStory = await getBrainrotAiStory(`Crie uma análise hilária sobre o nível 67 (${pct}%) do usuário @${targetName}.`);
+      if (!aiStory) {
+        const fallbacks = [
+          '67! 🗣️🔥 Sixen Seven ativado no nível máximo de Aura Brainrot!',
+          'Sua aura de 67 está tão forte que você foi promovido a Chefe da Tropa do 6-7! 🗿',
+          '67% de pura energia Sixen Seven! Você tem 6\'7 de altura no mundo espiritual e mogou os betinhas! 🤙⚡',
+          'Cuidado! O detector de Sixen Seven disparou a 67 km/h e amassou os betinhas! 🚨',
+          'Seu nível de 67 é Lendário! O meme do 67 curvou-se perante sua presença! 👑✨'
+        ];
+        aiStory = fallbacks[Math.floor(Math.random() * fallbacks.length)];
+      }
+
+      return reply(
+        `🤙 *MEDIDOR SIXEN SEVEN (67)* 🤙\n\n` +
+        `• *Alvo:* @${targetName}\n` +
+        `• *Nível 67:* *${pct}%*\n` +
+        `• *Aura Acumulada:* *${(user.aura || 0).toLocaleString()} pts*\n\n` +
+        `📢 *Status:* ${desc}\n\n` +
+        `🤖 *Análise da IA:* ${aiStory}`,
+        [target]
+      );
+    }
+
+    case 'betinha':
+    case 'beta': {
+      const target = mentioned[0] || sender;
+      const targetName = target.split('@')[0];
+      const pct = Math.floor(Math.random() * 101);
+
+      let status = '🗿 ALFA ABSOLUTO! (Imogável, aura intocável!)';
+      if (pct > 25) status = '⚠️ RISCO DE LEVAR MOG (Fique atento!)';
+      if (pct > 60) status = '📉 BETINHA DETECTADO (Aura caindo rapidamente!)';
+      if (pct > 85) status = '😭 NÃO SOBROU NADA PRO BETINHA! (TOTALMENTE MOGADO!)';
+
+      let aiAnalysis = await getBrainrotAiStory(`Gere uma frase sarcástica sobre @${targetName} ter ${pct}% de nível Betinha.`);
+      if (!aiAnalysis) {
+        aiAnalysis = pct > 50 
+          ? 'Foi mogado tão feio que nem o Wi-Fi pega mais perto dele. Não sobrou nada!' 
+          : 'Aura blindada de 67! Nem os mogadores conseguem afetar este alfa.';
+      }
+
+      return reply(
+        `📉 *MEDIDOR DE BETINHA* 📉\n\n` +
+        `• *Alvo:* @${targetName}\n` +
+        `• *Nível Betinha:* *${pct}%*\n\n` +
+        `📢 *Status:* ${status}\n\n` +
+        `🤖 *Veredito da IA:* ${aiAnalysis}`,
+        [target]
+      );
+    }
+
+    case 'mogar':
+    case 'mogado':
+    case 'mog': {
+      if (!mentioned || mentioned.length === 0) {
+        return reply('⚠️ Você precisa marcar alguém para mogar! Exemplo: `/mogar @marcar`');
+      }
+
+      const target = mentioned[0];
+      if (target === sender) {
+        return reply('⚠️ Você tentou se mogar no espelho e acabou se tornando um Betinha! 🪞📉');
+      }
+
+      const senderUser = getUser(sender);
+      const targetUser = getUser(target);
+
+      const senderAura = senderUser.aura || 0;
+      const targetAura = targetUser.aura || 0;
+
+      // Cálculo de vitória baseado em sorte + bônus de aura acumulada
+      const senderPower = Math.floor(Math.random() * 100) + Math.floor(senderAura / 100);
+      const targetPower = Math.floor(Math.random() * 100) + Math.floor(targetAura / 100);
+
+      const senderWins = senderPower >= targetPower;
+      const winner = senderWins ? sender : target;
+      const loser = senderWins ? target : sender;
+      const winnerName = winner.split('@')[0];
+      const loserName = loser.split('@')[0];
+
+      // Transferência de aura (30 pts)
+      const auraStolen = Math.min(30, getUser(loser).aura || 0);
+      updateUser(winner, { aura: (getUser(winner).aura || 0) + auraStolen });
+      updateUser(loser, { aura: Math.max(0, (getUser(loser).aura || 0) - auraStolen) });
+
+      let aiMogStory = await getBrainrotAiStory(`Descreva como @${winnerName} MOGOU completamente @${loserName} e não sobrou nada pro betinha.`);
+      if (!aiMogStory) {
+        aiMogStory = `@${winnerName} passou com 6'7 de postura e aura pura, mogou @${loserName} e não sobrou nada pro betinha!`;
+      }
+
+      return reply(
+        `🗿 *DUELO DE MOGGING (67)* 🗿\n\n` +
+        `👑 *Vencedor:* @${winnerName} MOGOU @${loserName}!\n` +
+        `⚡ *Roubo de Aura:* +${auraStolen} pts de Aura transferidos!\n\n` +
+        `🗣️ *Relatório do Mogging:* ${aiMogStory}`,
+        [winner, loser]
+      );
     }
 
     default:

@@ -45,6 +45,7 @@ import { handleLojaCommand } from './commands/economy/loja.js';
 import { handleComprarCommand } from './commands/economy/comprar.js';
 import { handleInventarioCommand } from './commands/economy/inventario.js';
 import { handleRankingCommand } from './commands/economy/ranking.js';
+import { handleAuraCommand, handleFarmarAuraCommand } from './commands/economy/aura.js';
 
 import { handleLevelCommand } from './commands/xp/level.js';
 import { handleRankCommand } from './commands/xp/rank.js';
@@ -336,6 +337,9 @@ export async function handleMessages(sock, msg) {
                        `「 🖐️ 」/tapa - dar um tapa em alguém\n` +
                        `「 🥛 」/mamada - mamada em alguém\n` +
                        `「 💦 」/gozar - expressar pura emoção\n` +
+                       `「 🤙 」/67 - medidor do meme Sixen Seven (67)\n` +
+                       `「 📉 」/betinha - medidor de nível Betinha\n` +
+                       `「 🗿 」/mogar - duelo de Mogging para roubar Aura do oponente\n` +
                        `「 🔨 」/ban - remover alguém do grupo (admin)\n` +
                        `「 👁️ 」/ver - revelar mídia de visualização única\n` +
                        `「 🔑 」/adm - autorizar alguém a usar /ver (dono)\n` +
@@ -377,7 +381,9 @@ export async function handleMessages(sock, msg) {
                        `「 🏪 」/loja - catálogo de itens RPG e carros de luxo\n` +
                        `「 🛒 」/comprar - adquirir itens para sua coleção\n` +
                        `「 🎒 」/inventario - itens comprados + avaliação de colecionador (IA)\n` +
-                       `「 🏆 」/ranking - top membros mais ricos (Forbes Bot)\n\n` +
+                       `「 🏆 」/ranking - top membros mais ricos (Forbes Bot)\n` +
+                       `「 ✨ 」/aura - ver seu status espiritual e card de Aura\n` +
+                       `「 🧘 」/farmar aura - canalizar e cultivar pontos de Aura (cooldown 15m)\n\n` +
                        `⭐ *SISTEMA DE XP & PATENTES RPG*\n` +
                        `「 🎖️ 」/level - nível atual, XP e barra de progresso com Patente RPG\n` +
                        `「 📇 」/rank - cartão completo de perfil RPG + lema do guerreiro (IA)\n` +
@@ -404,7 +410,7 @@ export async function handleMessages(sock, msg) {
        }
     }
     // Comandos Sociais Legados
-    else if (['casar', 'aceitar', 'recusar', 'divorcio', 'perfil', 'gay', 'romance', 'corno', 'feio', 'gostoso', 'bebado', 'chato', 'sortudo', 'beijo', 'tapa', 'mamada', 'gozar'].includes(command)) {
+    else if (['casar', 'aceitar', 'recusar', 'divorcio', 'perfil', 'gay', 'romance', 'corno', 'feio', 'gostoso', 'bebado', 'chato', 'sortudo', 'beijo', 'tapa', 'mamada', 'gozar', '67', 'six7', 'sixenseven', 'sixseven', 'betinha', 'beta', 'mogar', 'mogado', 'mog'].includes(command)) {
       await handleSocialCommands(sock, msg, command, args, sender, mentioned);
     } 
     // Comandos de Administração Legados
@@ -452,6 +458,8 @@ export async function handleMessages(sock, msg) {
     else if (command === 'comprar') await handleComprarCommand(sock, msg, args, sender);
     else if (command === 'inventario') await handleInventarioCommand(sock, msg, sender, mentioned);
     else if (command === 'ranking') await handleRankingCommand(sock, msg);
+    else if (command === 'aura') await handleAuraCommand(sock, msg, args, sender, mentioned);
+    else if (command === 'farmar') await handleFarmarAuraCommand(sock, msg, sender);
     // ⭐ Sistema de XP
     else if (command === 'level') await handleLevelCommand(sock, msg, sender, mentioned);
     else if (command === 'rank') await handleRankCommand(sock, msg, sender, mentioned);

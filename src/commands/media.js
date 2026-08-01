@@ -345,74 +345,84 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
     }
 
     case 'play': {
-      const query = args.join(' ');
+      const query = args.join(' ').trim();
       if (!query) {
         return reply('⚠️ Digite o nome da música ou o link do YouTube/TikTok/Instagram. Exemplo: /play Linkin Park Numb');
       }
 
-      if (/tiktok\.com/i.test(query)) {
+      if (/(tiktok\.com|vt\.tiktok|vm\.tiktok)/i.test(query)) {
         await reply('⏳ Baixando áudio do TikTok, aguarde...');
+        let music;
         try {
-          const music = await downloadTiktokAudio(query);
+          music = await downloadTiktokAudio(query);
           await sock.sendMessage(
             from, 
             { 
-              audio: { url: music.filePath }, 
+              audio: fs.readFileSync(music.filePath), 
               mimetype: 'audio/mp4', 
               fileName: `${music.title}.mp3` 
             }, 
             { quoted: msg }
           );
-          fs.unlinkSync(music.filePath);
           return;
         } catch (error) {
           console.error('Erro ao baixar áudio do TikTok via /play:', error);
           return reply('⚠️ Erro ao baixar áudio do TikTok.');
+        } finally {
+          if (music?.filePath && fs.existsSync(music.filePath)) {
+            try { fs.unlinkSync(music.filePath); } catch (_) {}
+          }
         }
       }
 
-      if (/instagram\.com/i.test(query)) {
+      if (/(instagram\.com|instagr\.am)/i.test(query)) {
         await reply('⏳ Baixando áudio do Instagram, aguarde...');
+        let music;
         try {
-          const music = await downloadInstagramAudio(query);
+          music = await downloadInstagramAudio(query);
           await sock.sendMessage(
             from, 
             { 
-              audio: { url: music.filePath }, 
+              audio: fs.readFileSync(music.filePath), 
               mimetype: 'audio/mp4', 
               fileName: `${music.title}.mp3` 
             }, 
             { quoted: msg }
           );
-          fs.unlinkSync(music.filePath);
           return;
         } catch (error) {
           console.error('Erro ao baixar áudio do Instagram via /play:', error);
           return reply('⚠️ Erro ao baixar áudio do Instagram. Verifique se a publicação é pública.');
+        } finally {
+          if (music?.filePath && fs.existsSync(music.filePath)) {
+            try { fs.unlinkSync(music.filePath); } catch (_) {}
+          }
         }
       }
 
       await reply('⏳ Buscando e baixando áudio do YouTube, aguarde...');
 
+      let music;
       try {
-        const music = await downloadYoutubeAudio(query);
+        music = await downloadYoutubeAudio(query);
 
         await sock.sendMessage(
           from, 
           { 
-            audio: { url: music.filePath }, 
+            audio: fs.readFileSync(music.filePath), 
             mimetype: 'audio/mp4', 
             fileName: `${music.title}.mp3` 
           }, 
           { quoted: msg }
         );
-
-        // Limpa temporários
-        fs.unlinkSync(music.filePath);
       } catch (error) {
         console.error('Erro ao baixar música:', error);
         const detail = error?.message ? ` (${error.message.slice(0, 100)})` : '';
         return reply(`⚠️ Erro ao buscar/baixar a música${detail}. Tente novamente em instantes.`);
+      } finally {
+        if (music?.filePath && fs.existsSync(music.filePath)) {
+          try { fs.unlinkSync(music.filePath); } catch (_) {}
+        }
       }
       break;
     }

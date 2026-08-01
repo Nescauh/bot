@@ -205,15 +205,17 @@ export function getUser(jid) {
         bank: 0,
         xp: 0,
         level: 1,
+        aura: 0,
         last_daily: 0,
         last_work: 0,
+        last_aura_farm: 0,
         daily_streak: 0,
         inventory: '[]'
       };
       if (dbInstance) {
         try {
           dbInstance.run(
-            'INSERT OR IGNORE INTO users (jid, wallet, bank, xp, level, last_daily, last_work, daily_streak, inventory) VALUES (?, 0, 0, 0, 1, 0, 0, 0, "[]")',
+            'INSERT OR IGNORE INTO users (jid, wallet, bank, xp, level, aura, last_daily, last_work, last_aura_farm, daily_streak, inventory) VALUES (?, 0, 0, 0, 1, 0, 0, 0, 0, 0, "[]")',
             [jid]
           );
         } catch (_) {}
@@ -228,8 +230,10 @@ export function getUser(jid) {
   u.bank = Number(u.bank) || 0;
   u.xp = Number(u.xp) || 0;
   u.level = Number(u.level) || 1;
+  u.aura = Number(u.aura) || 0;
   u.last_daily = Number(u.last_daily) || 0;
   u.last_work = Number(u.last_work) || 0;
+  u.last_aura_farm = Number(u.last_aura_farm) || 0;
   u.daily_streak = Number(u.daily_streak) || 0;
   u.inventory = u.inventory || '[]';
 

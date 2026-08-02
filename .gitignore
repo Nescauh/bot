@@ -11,3 +11,4 @@ API-Youtube-Download/
 *.zip
 *-player-script.js
 user_facts.json
+backups/

@@ -1,410 +1,63 @@
-import initSqlJs from 'sql.js';
-import path from 'path';
-import fs from 'fs';
+import databaseManager from './DatabaseManager.js';
 
-const DB_PATH = path.resolve('bot_data.sqlite');
-const FALLBACK_JSON_PATH = path.resolve('database.json');
-
-let dbInstance = null;
-let memoryStore = null;
+export async function initSqlite() {
+  await databaseManager.initialize();
+}
 
 export function getStore() {
-  if (memoryStore) return memoryStore;
-
-  if (fs.existsSync(FALLBACK_JSON_PATH)) {
-    try {
-      memoryStore = JSON.parse(fs.readFileSync(FALLBACK_JSON_PATH, 'utf-8'));
-    } catch (_) {}
-  }
-
-  if (!memoryStore) {
-    memoryStore = {};
-  }
-
-  memoryStore.users = memoryStore.users || {};
-  memoryStore.warns = memoryStore.warns || {};
-  memoryStore.group_configs = memoryStore.group_configs || {};
-  memoryStore.reminders = memoryStore.reminders || [];
-  memoryStore.casamentos = memoryStore.casamentos || {};
-  memoryStore.pedidosCasamento = memoryStore.pedidosCasamento || {};
-  memoryStore.autorizadosVer = memoryStore.autorizadosVer || [];
-  memoryStore.configGrupos = memoryStore.configGrupos || {};
-
-  return memoryStore;
+  return databaseManager.getDatabase();
 }
 
 export function saveStore() {
-  if (!memoryStore) return;
-  try {
-    fs.writeFileSync(FALLBACK_JSON_PATH, JSON.stringify(memoryStore, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Erro ao salvar banco de dados em database.json:', err);
-  }
+  databaseManager.saveDatabase();
 }
-
-function saveSqliteFile() {
-  if (!dbInstance) return;
-  try {
-    const data = dbInstance.export();
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(DB_PATH, buffer);
-  } catch (err) {
-    console.error('Erro ao salvar arquivo SQLite:', err);
-  }
-}
-
-// Inicializa o SQLite via WebAssembly (sql.js - 100% puro JS sem dependência de C++/GLIBC)
-export async function initSqlite() {
-  try {
-    const SQL = await initSqlJs();
-    if (fs.existsSync(DB_PATH)) {
-      const filebuffer = fs.readFileSync(DB_PATH);
-      dbInstance = new SQL.Database(filebuffer);
-    } else {
-      dbInstance = new SQL.Database();
-    }
-
-    dbInstance.run(`
-      CREATE TABLE IF NOT EXISTS users (
-        jid TEXT PRIMARY KEY,
-        wallet INTEGER DEFAULT 0,
-        bank INTEGER DEFAULT 0,
-        xp INTEGER DEFAULT 0,
-        level INTEGER DEFAULT 1,
-        last_daily INTEGER DEFAULT 0,
-        last_work INTEGER DEFAULT 0,
-        daily_streak INTEGER DEFAULT 0,
-        inventory TEXT DEFAULT '[]'
-      );
-
-      CREATE TABLE IF NOT EXISTS warns (
-        group_jid TEXT,
-        user_jid TEXT,
-        count INTEGER DEFAULT 0,
-        PRIMARY KEY (group_jid, user_jid)
-      );
-
-      CREATE TABLE IF NOT EXISTS group_configs (
-        group_jid TEXT PRIMARY KEY,
-        antilink INTEGER DEFAULT 0,
-        antispam INTEGER DEFAULT 0,
-        welcome INTEGER DEFAULT 0,
-        rules TEXT DEFAULT ''
-      );
-
-      CREATE TABLE IF NOT EXISTS reminders (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_jid TEXT,
-        chat_jid TEXT,
-        target_time INTEGER,
-        message TEXT
-      );
-    `);
-
-    // Tenta adicionar novas colunas dinâmicas se já não existirem
-    try {
-      dbInstance.run('ALTER TABLE users ADD COLUMN daily_streak INTEGER DEFAULT 0');
-    } catch (_) {}
-
-    // Hidrata o memoryStore com os dados do SQLite existentes no arquivo
-    const store = getStore();
-    
-    try {
-      const resUsers = dbInstance.exec("SELECT * FROM users");
-      if (resUsers.length > 0) {
-        const columns = resUsers[0].columns;
-        resUsers[0].values.forEach(row => {
-          const userObj = {};
-          columns.forEach((col, idx) => userObj[col] = row[idx]);
-          if (userObj.jid) {
-            // Preserva dados de memoryStore se já existirem e forem mais atualizados
-            store.users[userObj.jid] = {
-              ...userObj,
-              ...(store.users[userObj.jid] || {})
-            };
-          }
-        });
-      }
-    } catch (e) {
-      console.error('Erro ao hidratar usuários do SQLite:', e);
-    }
-
-    try {
-      const resWarns = dbInstance.exec("SELECT * FROM warns");
-      if (resWarns.length > 0) {
-        const columns = resWarns[0].columns;
-        resWarns[0].values.forEach(row => {
-          const warnObj = {};
-          columns.forEach((col, idx) => warnObj[col] = row[idx]);
-          if (warnObj.group_jid && warnObj.user_jid) {
-            store.warns[`${warnObj.group_jid}_${warnObj.user_jid}`] = warnObj.count || 0;
-          }
-        });
-      }
-    } catch (e) {}
-
-    try {
-      const resGroup = dbInstance.exec("SELECT * FROM group_configs");
-      if (resGroup.length > 0) {
-        const columns = resGroup[0].columns;
-        resGroup[0].values.forEach(row => {
-          const cfgObj = {};
-          columns.forEach((col, idx) => cfgObj[col] = row[idx]);
-          if (cfgObj.group_jid) {
-            store.group_configs[cfgObj.group_jid] = cfgObj;
-          }
-        });
-      }
-    } catch (e) {}
-
-    try {
-      const resReminders = dbInstance.exec("SELECT * FROM reminders");
-      if (resReminders.length > 0) {
-        const columns = resReminders[0].columns;
-        store.reminders = resReminders[0].values.map(row => {
-          const rObj = {};
-          columns.forEach((col, idx) => rObj[col] = row[idx]);
-          return rObj;
-        });
-      }
-    } catch (e) {}
-
-    saveStore();
-    saveSqliteFile();
-    console.log('🗄️ Banco de dados SQLite WebAssembly (sql.js) ativado e dados sincronizados!');
-  } catch (err) {
-    console.warn('⚠️ Falha ao carregar WebAssembly do SQLite. Utilizando armazenamento JSON local.', err.message);
-    dbInstance = null;
-  }
-}
-
-// --- Funções de Usuário / Economia / XP ---
 
 export function getUser(jid) {
-  const store = getStore();
-  if (!store.users[jid]) {
-    let existingFromDb = null;
-    if (dbInstance) {
-      try {
-        const res = dbInstance.exec('SELECT * FROM users WHERE jid = ?', [jid]);
-        if (res.length > 0 && res[0].values.length > 0) {
-          const columns = res[0].columns;
-          const row = res[0].values[0];
-          existingFromDb = {};
-          columns.forEach((col, idx) => existingFromDb[col] = row[idx]);
-        }
-      } catch (_) {}
-    }
-
-    if (existingFromDb) {
-      store.users[jid] = existingFromDb;
-    } else {
-      store.users[jid] = {
-        jid,
-        wallet: 0,
-        bank: 0,
-        xp: 0,
-        level: 1,
-        aura: 0,
-        last_daily: 0,
-        last_work: 0,
-        last_aura_farm: 0,
-        daily_streak: 0,
-        inventory: '[]'
-      };
-      if (dbInstance) {
-        try {
-          dbInstance.run(
-            'INSERT OR IGNORE INTO users (jid, wallet, bank, xp, level, aura, last_daily, last_work, last_aura_farm, daily_streak, inventory) VALUES (?, 0, 0, 0, 1, 0, 0, 0, 0, 0, "[]")',
-            [jid]
-          );
-        } catch (_) {}
-      }
-    }
-    saveStore();
-    saveSqliteFile();
-  }
-
-  const u = store.users[jid];
-  u.wallet = Number(u.wallet) || 0;
-  u.bank = Number(u.bank) || 0;
-  u.xp = Number(u.xp) || 0;
-  u.level = Number(u.level) || 1;
-  u.aura = Number(u.aura) || 0;
-  u.last_daily = Number(u.last_daily) || 0;
-  u.last_work = Number(u.last_work) || 0;
-  u.last_aura_farm = Number(u.last_aura_farm) || 0;
-  u.daily_streak = Number(u.daily_streak) || 0;
-  u.inventory = u.inventory || '[]';
-
-  return u;
+  return databaseManager.getUser(jid);
 }
 
 export function updateUser(jid, updates) {
-  const user = getUser(jid);
-  for (const [key, val] of Object.entries(updates)) {
-    user[key] = typeof val === 'object' ? JSON.stringify(val) : val;
-  }
-  saveStore();
-
-  if (dbInstance) {
-    try {
-      const fields = [];
-      const values = [];
-      for (const [key, val] of Object.entries(updates)) {
-        try {
-          dbInstance.run(`ALTER TABLE users ADD COLUMN ${key} TEXT`);
-        } catch (_) {}
-
-        fields.push(`${key} = ?`);
-        values.push(typeof val === 'object' ? JSON.stringify(val) : val);
-      }
-      values.push(jid);
-      dbInstance.run(`UPDATE users SET ${fields.join(', ')} WHERE jid = ?`, values);
-      saveSqliteFile();
-    } catch (err) {
-      console.error('Erro ao atualizar usuário no SQLite:', err);
-    }
-  }
+  return databaseManager.updateUser(jid, updates);
 }
 
 export function getTopUsersByWallet(limit = 10) {
-  const store = getStore();
-  const list = Object.values(store.users);
-  list.sort((a, b) => (Number(b.wallet || 0) + Number(b.bank || 0)) - (Number(a.wallet || 0) + Number(a.bank || 0)));
-  return list.slice(0, limit);
+  return databaseManager.getTopUsersByWallet(limit);
 }
 
 export function getTopUsersByXP(limit = 10) {
-  const store = getStore();
-  const list = Object.values(store.users);
-  list.sort((a, b) => Number(b.xp || 0) - Number(a.xp || 0));
-  return list.slice(0, limit);
+  return databaseManager.getTopUsersByXP(limit);
 }
 
-// --- Funções de Warns ---
-
 export function getWarns(groupJid, userJid) {
-  const store = getStore();
-  const key = `${groupJid}_${userJid}`;
-  return store.warns[key] || 0;
+  return databaseManager.getWarns(groupJid, userJid);
 }
 
 export function addWarn(groupJid, userJid) {
-  const store = getStore();
-  const key = `${groupJid}_${userJid}`;
-  const current = store.warns[key] || 0;
-  const next = current + 1;
-  store.warns[key] = next;
-  saveStore();
-
-  if (dbInstance) {
-    try {
-      dbInstance.run('INSERT OR REPLACE INTO warns (group_jid, user_jid, count) VALUES (?, ?, ?)', [groupJid, userJid, next]);
-      saveSqliteFile();
-    } catch (_) {}
-  }
-  return next;
+  return databaseManager.addWarn(groupJid, userJid);
 }
 
 export function resetWarns(groupJid, userJid) {
-  const store = getStore();
-  const key = `${groupJid}_${userJid}`;
-  delete store.warns[key];
-  saveStore();
-
-  if (dbInstance) {
-    try {
-      dbInstance.run('DELETE FROM warns WHERE group_jid = ? AND user_jid = ?', [groupJid, userJid]);
-      saveSqliteFile();
-    } catch (_) {}
-  }
+  return databaseManager.resetWarns(groupJid, userJid);
 }
 
-// --- Funções de Configurações de Grupo ---
-
 export function getGroupConfig(groupJid) {
-  const store = getStore();
-  if (!store.group_configs[groupJid]) {
-    store.group_configs[groupJid] = {
-      group_jid: groupJid,
-      antilink: 0,
-      antispam: 0,
-      welcome: 0,
-      rules: ''
-    };
-    saveStore();
-
-    if (dbInstance) {
-      try {
-        dbInstance.run('INSERT OR IGNORE INTO group_configs (group_jid, antilink, antispam, welcome, rules) VALUES (?, 0, 0, 0, "")', [groupJid]);
-        saveSqliteFile();
-      } catch (_) {}
-    }
-  }
-  return store.group_configs[groupJid];
+  return databaseManager.getGroupConfig(groupJid);
 }
 
 export function updateGroupConfig(groupJid, updates) {
-  const config = getGroupConfig(groupJid);
-  Object.assign(config, updates);
-  saveStore();
-
-  if (dbInstance) {
-    try {
-      const fields = [];
-      const values = [];
-      for (const [key, val] of Object.entries(updates)) {
-        fields.push(`${key} = ?`);
-        values.push(val);
-      }
-      values.push(groupJid);
-      dbInstance.run(`UPDATE group_configs SET ${fields.join(', ')} WHERE group_jid = ?`, values);
-      saveSqliteFile();
-    } catch (_) {}
-  }
+  return databaseManager.updateGroupConfig(groupJid, updates);
 }
 
-// --- Funções de Lembretes ---
-
 export function addReminder(userJid, chatJid, targetTime, message) {
-  const store = getStore();
-  const reminder = {
-    id: Date.now(),
-    user_jid: userJid,
-    chat_jid: chatJid,
-    target_time: targetTime,
-    message
-  };
-  store.reminders.push(reminder);
-  saveStore();
-
-  if (dbInstance) {
-    try {
-      dbInstance.run('INSERT INTO reminders (user_jid, chat_jid, target_time, message) VALUES (?, ?, ?, ?)', [userJid, chatJid, targetTime, message]);
-      saveSqliteFile();
-    } catch (_) {}
-  }
-  return reminder;
+  return databaseManager.addReminder(userJid, chatJid, targetTime, message);
 }
 
 export function getPendingReminders() {
-  const store = getStore();
-  const now = Date.now();
-  return store.reminders.filter(r => r.target_time <= now);
+  return databaseManager.getPendingReminders();
 }
 
 export function deleteReminder(id) {
-  const store = getStore();
-  store.reminders = store.reminders.filter(r => r.id !== id);
-  saveStore();
-
-  if (dbInstance) {
-    try {
-      dbInstance.run('DELETE FROM reminders WHERE id = ?', [id]);
-      saveSqliteFile();
-    } catch (_) {}
-  }
+  return databaseManager.deleteReminder(id);
 }
 
-export default dbInstance;
+export default databaseManager;

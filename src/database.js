@@ -1,23 +1,33 @@
-import { getStore, saveStore } from './database/sqlite.js';
+import databaseManager from './database/DatabaseManager.js';
 
 // Carrega o banco de dados unificado
-export function loadDatabase() {
-  getStore();
+export async function loadDatabase() {
+  await databaseManager.initialize();
 }
 
 // Salva o banco de dados unificado sem apagar os usuários
-export function saveDatabase() {
-  saveStore();
+export async function saveDatabase() {
+  await databaseManager.saveDatabase();
 }
 
 // Retorna a instância completa do banco de dados unificado
 export function getDatabase() {
-  return getStore();
+  return databaseManager.getDatabase();
 }
 
 // Atualiza o banco de dados de forma segura preservando todas as propriedades existentes
-export function updateDatabase(fn) {
-  const db = getStore();
-  fn(db);
-  saveStore();
+export async function updateDatabase(fn) {
+  const db = databaseManager.getDatabase();
+  await fn(db);
+  await databaseManager.saveDatabase();
 }
+
+export function getUser(jid) {
+  return databaseManager.getUser(jid);
+}
+
+export function updateUser(jid, updates) {
+  return databaseManager.updateUser(jid, updates);
+}
+
+export default databaseManager;

@@ -66,6 +66,9 @@ import { handleInfoCommand } from './commands/info/info.js';
 import { handleBotinfoCommand } from './commands/info/botinfo.js';
 import { handleGrupoCommand } from './commands/info/grupo.js';
 
+import queueManager from './queue/QueueManager.js';
+import { handleQueueStatsCommand } from './commands/admin_extra/queueStats.js';
+
 // Módulos do Sistema de Interação Inteligente
 import { AutoReply } from './interaction/AutoReply.js';
 import { conversationMemory } from './interaction/ConversationMemory.js';
@@ -99,9 +102,11 @@ function cacheMessage(from, msg) {
   }
 }
 
-export async function handleMessages(sock, msg) {
+export async function handleMessages(rawSock, msg) {
   const from = msg.key.remoteJid;
   if (!from) return;
+
+  const sock = queueManager.wrapSocket(rawSock);
 
   const isGroup = from.endsWith('@g.us');
   const sender = msg.key.participant || msg.key.remoteJid;
@@ -417,15 +422,15 @@ export async function handleMessages(sock, msg) {
     else if (['ban', 'adm', 'remover', 'antidel'].includes(command)) {
       await handleAdminCommands(sock, msg, command, args, sender, mentioned);
     } 
-    // Comandos de Mídia Legados
+    // Comandos de Mídia Legados (Downloads/Stickers)
     else if (['sticker', 'unsticker', 'ver', 'play', 'video', 'tiktok', 'ttvideo', 'tiktokaudio', 'ttplay', 'ig', 'insta', 'igvideo', 'igaudio', 'instavideo', 'instaaudio', 'igplay'].includes(command)) {
-      await handleMediaCommands(sock, msg, command, args, sender);
+      await queueManager.enqueueHeavyCommand(from, command, () => handleMediaCommands(sock, msg, command, args, sender));
     }
     // 🤖 IA
-    else if (command === 'ia') await handleIaCommand(sock, msg, args);
-    else if (command === 'traduzir') await handleTraduzirCommand(sock, msg, args);
-    else if (command === 'resumir') await handleResumirCommand(sock, msg, args);
-    else if (command === 'explicar') await handleExplicarCommand(sock, msg, args);
+    else if (command === 'ia') await queueManager.enqueueHeavyCommand(from, command, () => handleIaCommand(sock, msg, args));
+    else if (command === 'traduzir') await queueManager.enqueueHeavyCommand(from, command, () => handleTraduzirCommand(sock, msg, args));
+    else if (command === 'resumir') await queueManager.enqueueHeavyCommand(from, command, () => handleResumirCommand(sock, msg, args));
+    else if (command === 'explicar') await queueManager.enqueueHeavyCommand(from, command, () => handleExplicarCommand(sock, msg, args));
     // 👥 Administração Adicional
     else if (command === 'kick') await handleKickCommand(sock, msg, args, sender, mentioned);
     else if (command === 'promote') await handlePromoteCommand(sock, msg, args, sender, mentioned);
@@ -471,8 +476,10 @@ export async function handleMessages(sock, msg) {
     else if (command === 'lembrete') await handleLembreteCommand(sock, msg, args, sender);
     else if (command === 'qrcode') await handleQrcodeCommand(sock, msg, args);
     else if (command === 'readqr') await handleReadqrCommand(sock, msg);
-    else if (command === 'tts') await handleTtsCommand(sock, msg, args);
-    else if (command === 'ocr') await handleOcrCommand(sock, msg);
+    else if (command === 'tts') await queueManager.enqueueHeavyCommand(from, command, () => handleTtsCommand(sock, msg, args));
+    else if (command === 'ocr') await queueManager.enqueueHeavyCommand(from, command, () => handleOcrCommand(sock, msg));
+    // 📊 Status da Fila
+    else if (['queue', 'filas', 'fila'].includes(command)) await handleQueueStatsCommand(sock, msg);
     // ℹ Informações
     else if (command === 'ping') await handlePingCommand(sock, msg);
     else if (command === 'uptime') await handleUptimeCommand(sock, msg);

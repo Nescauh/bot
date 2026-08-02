@@ -73,11 +73,15 @@ function runYtDlpExecFile(args) {
 // Monta os argumentos base para o yt-dlp ignorar bloqueios de robôs do YouTube em servidores (Railway/Cloud)
 function buildBaseArgs(withCookies = true, clientOverride = null) {
   const nodePath = process.execPath;
+  const jsRuntimes = fs.existsSync('/root/.deno/bin/deno')
+    ? `deno:/root/.deno/bin/deno,deno,node:${nodePath},node`
+    : `deno,node:${nodePath},node`;
+
   const args = [
     '--no-playlist',
     '--force-ipv4',
     '--geo-bypass',
-    '--js-runtimes', `node:${nodePath}`,
+    '--js-runtimes', jsRuntimes,
     '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
   ];
   

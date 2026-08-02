@@ -71,15 +71,18 @@ function runYtDlpExecFile(args) {
 }
 
 // Monta os argumentos base para o yt-dlp ignorar bloqueios de robôs do YouTube em servidores (Railway/Cloud)
-function buildBaseArgs(withCookies = false, clientOverride = 'ios,mweb,android,tv,web') {
+function buildBaseArgs(withCookies = true, clientOverride = null) {
   const args = [
     '--no-playlist',
     '--force-ipv4',
     '--geo-bypass',
     '--js-runtimes', 'node',
-    '--extractor-args', `youtube:player_client=${clientOverride}`,
     '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
   ];
+  
+  if (clientOverride) {
+    args.push('--extractor-args', `youtube:player_client=${clientOverride}`);
+  }
   
   if (ffmpegPath && fs.existsSync(ffmpegPath)) {
     args.push('--ffmpeg-location', ffmpegPath);
@@ -93,42 +96,42 @@ function buildBaseArgs(withCookies = false, clientOverride = 'ios,mweb,android,t
   return args;
 }
 
-// Executa o download com retentativas inteligentes (prioriza requisição limpa sem cookies expirados no Railway)
+// Executa o download com retentativas inteligentes (prioriza requisição com cookies autenticados)
 async function downloadWithYtDlp(url, specificArgs) {
-  // Tentativa 1: Limpo sem cookies + cliente iOS/mweb/Android/TV (Supera bloqueio de IP do Railway)
+  // Tentativa 1: Com cookies.txt (se existir) + padrão do yt-dlp (Mais confiável)
   try {
-    const argsClean = [url, ...buildBaseArgs(false, 'ios,mweb,android,tv,web'), ...specificArgs];
-    return await runYtDlpExecFile(argsClean);
+    const argsStandard = [url, ...buildBaseArgs(true, null), ...specificArgs];
+    return await runYtDlpExecFile(argsStandard);
   } catch (firstError) {
-    console.warn('⚠️ Falha 1 (sem cookies ios/mweb). Tentando cliente android,web sem cookies...', firstError.message);
+    console.warn('⚠️ Falha 1 (cookies padrao). Tentando com cookies + cliente android_vr,web...', firstError.message);
     
-    // Tentativa 2: Sem cookies + cliente android,web
+    // Tentativa 2: Com cookies + cliente android_vr,web
     try {
-      const argsAndroid = [url, ...buildBaseArgs(false, 'android,web'), ...specificArgs];
-      return await runYtDlpExecFile(argsAndroid);
+      const argsAndroidVr = [url, ...buildBaseArgs(true, 'android_vr,web'), ...specificArgs];
+      return await runYtDlpExecFile(argsAndroidVr);
     } catch (secondError) {
-      console.warn('⚠️ Falha 2 (android,web). Tentando cliente tv_embedded...', secondError.message);
+      console.warn('⚠️ Falha 2 (cookies android_vr). Tentando com cookies + cliente mweb,web...', secondError.message);
       
-      // Tentativa 3: Sem cookies + cliente tv_embedded
+      // Tentativa 3: Com cookies + cliente mweb,web
       try {
-        const argsTv = [url, ...buildBaseArgs(false, 'tv_embedded,web'), ...specificArgs];
-        return await runYtDlpExecFile(argsTv);
+        const argsMweb = [url, ...buildBaseArgs(true, 'mweb,web'), ...specificArgs];
+        return await runYtDlpExecFile(argsMweb);
       } catch (thirdError) {
-        console.warn('⚠️ Falha 3 (tv_embedded). Tentando com cookies.txt como última alternativa...', thirdError.message);
+        console.warn('⚠️ Falha 3 (cookies mweb). Tentando sem cookies + cliente android,web...', thirdError.message);
         
-        // Tentativa 4: Com cookies.txt (se existir) como última tentativa
+        // Tentativa 4: Sem cookies + cliente android,web
         try {
-          const argsCookies = [url, ...buildBaseArgs(true, 'ios,mweb,android,web'), ...specificArgs];
-          return await runYtDlpExecFile(argsCookies);
+          const argsNoCookies = [url, ...buildBaseArgs(false, 'android,web'), ...specificArgs];
+          return await runYtDlpExecFile(argsNoCookies);
         } catch (fourthError) {
-          console.warn('⚠️ Falha 4 (cookies). Tentando wrapper ytdl...', fourthError.message);
+          console.warn('⚠️ Falha 4 (sem cookies). Tentando wrapper ytdl...', fourthError.message);
           
-          // Tentativa 5: Wrapper ytdl com extractor-args
+          // Tentativa 5: Wrapper ytdl com cookies
           return await ytdl(url, {
             noPlaylist: true,
             forceIpv4: true,
             jsRuntimes: 'node',
-            extractorArgs: 'youtube:player_client=ios,mweb,android,web',
+            ...(fs.existsSync(COOKIES_PATH) ? { cookies: COOKIES_PATH } : {}),
             ...(ffmpegPath && fs.existsSync(ffmpegPath) ? { ffmpegLocation: ffmpegPath } : {}),
           });
         }

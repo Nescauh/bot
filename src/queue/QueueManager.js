@@ -8,12 +8,15 @@ export const Priority = {
 
 class QueueManager {
   constructor() {
-    // Filas isoladas por Chat JID: Map<chatJid, Array<TaskItem>>
-    this.chatQueues = new Map();
-    // Estado de processamento por Chat JID: Map<chatJid, boolean>
-    this.isProcessingMap = new Map();
+    // Fila de Envio de Mensagens (sock.sendMessage) por Chat JID: Map<chatJid, Array<MessageTask>>
+    this.messageQueues = new Map();
+    this.isProcessingMessageMap = new Map();
 
-    // Configuração de delay humanizado (padrão 1800ms a 3000ms, média ~2.5s)
+    // Fila de Comandos Pesados (/play, /video, /ia, /tts, /ocr) por Chat JID: Map<chatJid, Array<HeavyTask>>
+    this.heavyQueues = new Map();
+    this.isProcessingHeavyMap = new Map();
+
+    // Configuração de delay humanizado (1800ms a 3000ms, média ~2.5s)
     this.minDelay = 1800;
     this.maxDelay = 3000;
 
@@ -47,49 +50,26 @@ class QueueManager {
     return delay;
   }
 
-  // Determina a prioridade baseada no comando ou conteúdo
-  determinePriority(commandName, content) {
-    if (!commandName && content?.text) {
-      const lower = content.text.toLowerCase();
-      if (lower.includes('erro') || lower.includes('⚠️') || lower.includes('🚫') || lower.includes('confirmac') || lower.includes('qr code')) {
-        return Priority.HIGH;
-      }
-    }
-
-    const cmd = (commandName || '').toLowerCase();
-    if (['play', 'video', 'tiktok', 'ttvideo', 'tiktokaudio', 'ig', 'insta', 'igvideo', 'igaudio'].includes(cmd)) {
-      return Priority.LOW;
-    }
-    if (['ia', 'tts', 'ocr', 'traduzir', 'resumir', 'explicar', 'sticker', 'unsticker'].includes(cmd)) {
-      return Priority.NORMAL;
-    }
-    return Priority.NORMAL;
-  }
-
-  // Adiciona uma tarefa à fila de um determinado chatJid
-  enqueue(chatJid, taskFn, priority = Priority.NORMAL, category = 'message') {
+  // --- FILA DE MENSAGENS (sock.sendMessage) ---
+  enqueueMessage(chatJid, sendFn, priority = Priority.NORMAL) {
     if (!chatJid) chatJid = 'global';
 
-    if (!this.chatQueues.has(chatJid)) {
-      this.chatQueues.set(chatJid, []);
+    if (!this.messageQueues.has(chatJid)) {
+      this.messageQueues.set(chatJid, []);
     }
 
-    const queue = this.chatQueues.get(chatJid);
+    const queue = this.messageQueues.get(chatJid);
 
     const taskItem = {
       id: Date.now() + Math.random(),
-      taskFn,
+      sendFn,
       priority,
-      category,
       addedAt: Date.now()
     };
 
-    // Atualiza contadores globais de estatísticas
-    if (category === 'download') this.stats.downloadsQueued++;
-    else if (category === 'ia') this.stats.iaQueued++;
-    else this.stats.messagesQueued++;
+    this.stats.messagesQueued++;
 
-    // Insere ordenando por prioridade (HIGH > NORMAL > LOW), mantendo FIFO para prioridades iguais
+    // Insere ordenado por prioridade (HIGH=1 > NORMAL=2 > LOW=3)
     let inserted = false;
     for (let i = 0; i < queue.length; i++) {
       if (taskItem.priority < queue[i].priority) {
@@ -102,42 +82,34 @@ class QueueManager {
       queue.push(taskItem);
     }
 
-    this.log('Comando adicionado.');
-
-    // Dispara o loop de processamento para esse chat se ainda não estiver rodando
-    this.processNext(chatJid);
+    this.processNextMessage(chatJid);
   }
 
-  // Processa itens da fila de um chat específico sequencialmente (FIFO por prioridade)
-  async processNext(chatJid) {
-    if (this.isProcessingMap.get(chatJid)) {
-      return; // Já existe um loop rodando para este chat
-    }
-
-    const queue = this.chatQueues.get(chatJid);
-    if (!queue || queue.length === 0) {
-      this.chatQueues.delete(chatJid);
-      this.isProcessingMap.delete(chatJid);
+  async processNextMessage(chatJid) {
+    if (this.isProcessingMessageMap.get(chatJid)) {
       return;
     }
 
-    this.isProcessingMap.set(chatJid, true);
+    const queue = this.messageQueues.get(chatJid);
+    if (!queue || queue.length === 0) {
+      this.messageQueues.delete(chatJid);
+      this.isProcessingMessageMap.delete(chatJid);
+      return;
+    }
+
+    this.isProcessingMessageMap.set(chatJid, true);
 
     while (queue.length > 0) {
       const currentTask = queue.shift();
-      this.log('Iniciando processamento.');
 
       try {
-        await currentTask.taskFn();
+        await currentTask.sendFn();
         this.stats.completedTasks++;
-        this.log('Finalizado.');
       } catch (err) {
-        this.logErr('Erro na execução da tarefa da fila:', err);
+        this.logErr('Erro no envio da mensagem enfileirada:', err);
       }
 
-      // Aplica intervalo humanizado se houver mais itens para este chat
       if (queue.length > 0) {
-        this.log('Próximo da fila.');
         const delay = this.getRandomHumanDelay();
         if (delay > 0) {
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -145,11 +117,78 @@ class QueueManager {
       }
     }
 
-    this.isProcessingMap.set(chatJid, false);
-    this.chatQueues.delete(chatJid);
+    this.isProcessingMessageMap.set(chatJid, false);
+    this.messageQueues.delete(chatJid);
   }
 
-  // Executa envio de mensagem Baileys com Retry Automático (2s, 4s, 8s)
+  // --- FILA DE COMANDOS PESADOS (/play, /video, /ia, /tts, /ocr) ---
+  enqueueHeavyCommand(chatJid, commandName, taskFn) {
+    if (!chatJid) chatJid = 'global';
+
+    const lowerCmd = (commandName || '').toLowerCase();
+    if (['play', 'video', 'tiktok', 'ttvideo', 'tiktokaudio', 'ig', 'insta', 'igvideo', 'igaudio'].includes(lowerCmd)) {
+      this.stats.downloadsQueued++;
+    } else if (['ia', 'tts', 'ocr', 'traduzir', 'resumir', 'explicar'].includes(lowerCmd)) {
+      this.stats.iaQueued++;
+    }
+
+    if (!this.heavyQueues.has(chatJid)) {
+      this.heavyQueues.set(chatJid, []);
+    }
+
+    const queue = this.heavyQueues.get(chatJid);
+
+    return new Promise((resolve, reject) => {
+      queue.push({
+        commandName,
+        taskFn,
+        resolve,
+        reject
+      });
+
+      this.log('Comando adicionado.');
+      this.processNextHeavy(chatJid);
+    });
+  }
+
+  async processNextHeavy(chatJid) {
+    if (this.isProcessingHeavyMap.get(chatJid)) {
+      return;
+    }
+
+    const queue = this.heavyQueues.get(chatJid);
+    if (!queue || queue.length === 0) {
+      this.heavyQueues.delete(chatJid);
+      this.isProcessingHeavyMap.delete(chatJid);
+      return;
+    }
+
+    this.isProcessingHeavyMap.set(chatJid, true);
+
+    while (queue.length > 0) {
+      const item = queue.shift();
+      this.log('Iniciando processamento.');
+
+      try {
+        const result = await item.taskFn();
+        this.log('Finalizado.');
+        item.resolve(result);
+      } catch (err) {
+        this.logErr(`Erro ao processar comando pesado /${item.commandName}:`, err);
+        this.log('Finalizado.');
+        item.reject(err);
+      }
+
+      if (queue.length > 0) {
+        this.log('Próximo da fila.');
+      }
+    }
+
+    this.isProcessingHeavyMap.set(chatJid, false);
+    this.heavyQueues.delete(chatJid);
+  }
+
+  // --- RETRY DE MENSAGENS BAILEYS ---
   async sendWithRetry(sock, jid, content, options, customDelays = [2000, 4000, 8000]) {
     const delays = customDelays;
     let attempt = 0;
@@ -172,11 +211,10 @@ class QueueManager {
     }
   }
 
-  // Submete um envio de mensagem para a fila do chat
   sendMessage(sock, jid, content, options = {}, priority = null) {
-    const prio = priority || this.determinePriority(null, content);
+    const prio = priority || (content?.text && (content.text.includes('erro') || content.text.includes('⚠️')) ? Priority.HIGH : Priority.NORMAL);
     return new Promise((resolve, reject) => {
-      this.enqueue(
+      this.enqueueMessage(
         jid,
         async () => {
           try {
@@ -186,43 +224,11 @@ class QueueManager {
             reject(err);
           }
         },
-        prio,
-        'message'
+        prio
       );
     });
   }
 
-  // Submete um comando pesado (/play, /video, /tts, /ia, /ocr) para a fila do chat
-  enqueueHeavyCommand(chatJid, commandName, taskFn) {
-    const lowerCmd = (commandName || '').toLowerCase();
-    let category = 'message';
-    if (['play', 'video', 'tiktok', 'ttvideo', 'tiktokaudio', 'ig', 'insta', 'igvideo', 'igaudio'].includes(lowerCmd)) {
-      category = 'download';
-    } else if (['ia', 'tts', 'ocr', 'traduzir', 'resumir', 'explicar'].includes(lowerCmd)) {
-      category = 'ia';
-    }
-
-    const priority = this.determinePriority(lowerCmd);
-
-    return new Promise((resolve, reject) => {
-      this.enqueue(
-        chatJid,
-        async () => {
-          try {
-            const res = await taskFn();
-            resolve(res);
-          } catch (err) {
-            // Em caso de falha no comando, captura para não travar a fila
-            reject(err);
-          }
-        },
-        priority,
-        category
-      );
-    });
-  }
-
-  // Wrapper para o Socket do Baileys para interceptar sock.sendMessage transparentemente
   wrapSocket(sock) {
     if (sock._isQueueWrapped) return sock;
 
@@ -237,14 +243,19 @@ class QueueManager {
     return wrapped;
   }
 
-  // Métricas para o comando /queue
   getStats() {
     let activeQueues = 0;
     let totalPendingMessages = 0;
 
-    for (const [jid, q] of this.chatQueues.entries()) {
+    for (const [jid, q] of this.messageQueues.entries()) {
       if (q.length > 0) {
         activeQueues++;
+        totalPendingMessages += q.length;
+      }
+    }
+    for (const [jid, q] of this.heavyQueues.entries()) {
+      if (q.length > 0) {
+        if (!this.messageQueues.has(jid)) activeQueues++;
         totalPendingMessages += q.length;
       }
     }

@@ -8,16 +8,16 @@ export function getStore() {
   return databaseManager.getDatabase();
 }
 
-export function saveStore() {
-  databaseManager.saveDatabase();
+export async function saveStore() {
+  await databaseManager.saveDatabase();
 }
 
 export function getUser(jid) {
   return databaseManager.getUser(jid);
 }
 
-export function updateUser(jid, updates) {
-  return databaseManager.updateUser(jid, updates);
+export async function updateUser(jid, updates) {
+  return await databaseManager.updateUser(jid, updates);
 }
 
 export function getTopUsersByWallet(limit = 10) {
@@ -39,32 +39,36 @@ export function getWarns(groupJid, userJid) {
   return databaseManager.getWarns(groupJid, userJid);
 }
 
-export function addWarn(groupJid, userJid) {
-  return databaseManager.addWarn(groupJid, userJid);
+export async function addWarn(groupJid, userJid) {
+  return await databaseManager.addWarn(groupJid, userJid);
 }
 
-export function resetWarns(groupJid, userJid) {
-  return databaseManager.resetWarns(groupJid, userJid);
+export async function resetWarns(groupJid, userJid) {
+  return await databaseManager.resetWarns(groupJid, userJid);
 }
 
 export function getGroupConfig(groupJid) {
   return databaseManager.getGroupConfig(groupJid);
 }
 
-export function updateGroupConfig(groupJid, updates) {
-  return databaseManager.updateGroupConfig(groupJid, updates);
+export async function updateGroupConfig(groupJid, updates) {
+  return await databaseManager.updateGroupConfig(groupJid, updates);
 }
 
-export function addReminder(userJid, chatJid, targetTime, message) {
-  return databaseManager.addReminder(userJid, chatJid, targetTime, message);
+export async function addReminder(userJid, chatJid, targetTime, message) {
+  return await databaseManager.addReminder(userJid, chatJid, targetTime, message);
 }
 
 export function getPendingReminders() {
   return databaseManager.getPendingReminders();
 }
 
-export function deleteReminder(id) {
-  return databaseManager.deleteReminder(id);
+export async function deleteReminder(id) {
+  return await databaseManager.deleteReminder(id);
+}
+
+export async function transferMoney(senderJid, targetJid, amount) {
+  return await databaseManager.transferMoney(senderJid, targetJid, amount);
 }
 
 export default databaseManager;

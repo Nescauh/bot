@@ -25,6 +25,32 @@
       "last_daily": 0,
       "last_work": 0,
       "inventory": "[]"
+    },
+    "user1@s.whatsapp.net": {
+      "jid": "user1@s.whatsapp.net",
+      "wallet": 0,
+      "bank": 0,
+      "xp": 0,
+      "level": 1,
+      "aura": 131,
+      "last_daily": 0,
+      "last_work": 0,
+      "last_aura_farm": 1785541874440,
+      "daily_streak": 0,
+      "inventory": "[]"
+    },
+    "user2@s.whatsapp.net": {
+      "jid": "user2@s.whatsapp.net",
+      "wallet": 0,
+      "bank": 0,
+      "xp": 0,
+      "level": 1,
+      "aura": 30,
+      "last_daily": 0,
+      "last_work": 0,
+      "last_aura_farm": 0,
+      "daily_streak": 0,
+      "inventory": "[]"
     }
   },
   "warns": {},

@@ -26,8 +26,12 @@ export function getUser(jid) {
   return databaseManager.getUser(jid);
 }
 
-export function updateUser(jid, updates) {
-  return databaseManager.updateUser(jid, updates);
+export async function updateUser(jid, updates) {
+  return await databaseManager.updateUser(jid, updates);
+}
+
+export async function transferMoney(senderJid, targetJid, amount) {
+  return await databaseManager.transferMoney(senderJid, targetJid, amount);
 }
 
 export default databaseManager;

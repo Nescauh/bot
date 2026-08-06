@@ -1,4 +1,4 @@
-import { getUser, updateUser } from '../../database/sqlite.js';
+import { getUser, transferMoney } from '../../database/sqlite.js';
 
 export async function handleTransferirCommand(sock, msg, args, sender, mentioned) {
   const from = msg.key.remoteJid;
@@ -19,10 +19,11 @@ export async function handleTransferirCommand(sock, msg, args, sender, mentioned
     return sock.sendMessage(from, { text: `⚠️ *SALDO INSUFICIENTE!*\n\nVocê não possui *$${amount}* moedas na carteira.\n💵 *Seu Saldo:* $${senderUser.wallet}` }, { quoted: msg });
   }
 
-  const targetUser = getUser(target);
-
-  updateUser(sender, { wallet: senderUser.wallet - amount });
-  updateUser(target, { wallet: targetUser.wallet + amount });
+  try {
+    await transferMoney(sender, target, amount);
+  } catch (err) {
+    return sock.sendMessage(from, { text: `⚠️ *ERRO NA TRANSAÇÃO!*\n\nNão foi possível concluir a transferência. Tente novamente mais tarde.` }, { quoted: msg });
+  }
 
   const txId = Math.floor(Math.random() * 899999) + 100000;
 

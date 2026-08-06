@@ -28,6 +28,13 @@ export function getTopUsersByXP(limit = 10) {
   return databaseManager.getTopUsersByXP(limit);
 }
 
+export function getTopUsersByAura(limit = 10) {
+  const store = getStore();
+  const list = Object.values(store.users || {});
+  list.sort((a, b) => Number(b.aura || 0) - Number(a.aura || 0));
+  return list.slice(0, limit);
+}
+
 export function getWarns(groupJid, userJid) {
   return databaseManager.getWarns(groupJid, userJid);
 }

@@ -66,6 +66,20 @@ import { handleInfoCommand } from './commands/info/info.js';
 import { handleBotinfoCommand } from './commands/info/botinfo.js';
 import { handleGrupoCommand } from './commands/info/grupo.js';
 
+import { handleOwnerEconomyCommands, activeResetConfirmations } from './commands/owner_economy.js';
+
+import { handleAiExtraCommands } from './commands/ai_extra.js';
+import { handleBankMarketCommands } from './commands/bank_market.js';
+import { handleMinigamesCommands } from './commands/minigames.js';
+import { handleRpgSystemCommands } from './commands/rpg_system.js';
+import { handleGroupReputationCommands } from './commands/group_reputation.js';
+import { handleMediaExtraCommands } from './commands/media_extra.js';
+import { handleAiImageCommands } from './commands/ai_image.js';
+import { handleVoiceSystemCommands } from './commands/voice_system.js';
+import { handleProfilePrestigeCommands } from './commands/profile_prestige.js';
+import { handleEventsSystemCommands } from './commands/events_system.js';
+import { handleVipShopCommands } from './commands/vip_shop.js';
+
 import queueManager from './queue/QueueManager.js';
 import { handleQueueStatsCommand } from './commands/admin_extra/queueStats.js';
 
@@ -280,6 +294,16 @@ export async function handleMessages(rawSock, msg) {
   }
 
   if (!body.startsWith(prefix)) {
+    const isSim = ['sim', 'confirmar', 'confirm', 'yes'].includes(body.toLowerCase().trim());
+    if (isSim) {
+      for (const [key, info] of activeResetConfirmations.entries()) {
+        if (key.startsWith(`${from}_${sender}_`)) {
+          await handleOwnerEconomyCommands(sock, msg, 'resetuser', [info.target, 'sim'], sender, [info.target]);
+          return;
+        }
+      }
+    }
+
     // Processar resposta automática/menção/saudação espontânea e memória
     await AutoReply.processMessage(sock, msg, body);
     return;
@@ -393,6 +417,17 @@ export async function handleMessages(rawSock, msg) {
                        `「 🎖️ 」/level - nível atual, XP e barra de progresso com Patente RPG\n` +
                        `「 📇 」/rank - cartão completo de perfil RPG + lema do guerreiro (IA)\n` +
                        `「 🌟 」/top - hall da fama das maiores lendas do grupo\n\n` +
+                       `👑 *ADMINISTRAÇÃO DA ECONOMIA (DONO)*\n` +
+                       `「 💵 」/givesaldo - dar saldo ao usuário\n` +
+                       `「 💸 」/removesaldo - remover saldo do usuário\n` +
+                       `「 ✨ 」/givexp - dar XP ao usuário\n` +
+                       `「 🌟 」/removexp - remover XP do usuário\n` +
+                       `「 🏆 」/givelevel - dar nível ao usuário\n` +
+                       `「 📉 」/removelevel - remover nível do usuário\n` +
+                       `「 🔮 」/giveaura - dar aura ao usuário\n` +
+                       `「 🧘 」/removeaura - remover aura do usuário\n` +
+                       `「 🔄 」/resetuser - resetar dados do usuário\n` +
+                       `「 📊 」/userinfo - ver todos os dados do usuário\n\n` +
                        `🛠 *UTILIDADES*\n` +
                        `「 🌤️ 」/clima - previsão do tempo por cidade\n` +
                        `「 🔢 」/calculadora - calcular expressões matemáticas\n` +
@@ -413,6 +448,10 @@ export async function handleMessages(rawSock, msg) {
        } else {
          return sock.sendMessage(from, { text: menuText }, { quoted: msg });
        }
+    }
+    // 👑 Administração da Economia (Dono)
+    else if (['givesaldo', 'removesaldo', 'givexp', 'removexp', 'givelevel', 'removelevel', 'giveaura', 'removeaura', 'resetuser', 'userinfo'].includes(command)) {
+      await handleOwnerEconomyCommands(sock, msg, command, args, sender, mentioned);
     }
     // Comandos Sociais Legados
     else if (['casar', 'aceitar', 'recusar', 'divorcio', 'perfil', 'gay', 'romance', 'corno', 'feio', 'gostoso', 'bebado', 'chato', 'sortudo', 'beijo', 'tapa', 'mamada', 'gozar', '67', 'six7', 'sixenseven', 'sixseven', 'betinha', 'beta', 'mogar', 'mogado', 'mog'].includes(command)) {
@@ -462,7 +501,7 @@ export async function handleMessages(rawSock, msg) {
     else if (command === 'loja') await handleLojaCommand(sock, msg);
     else if (command === 'comprar') await handleComprarCommand(sock, msg, args, sender);
     else if (command === 'inventario') await handleInventarioCommand(sock, msg, sender, mentioned);
-    else if (command === 'ranking') await handleRankingCommand(sock, msg);
+    else if (command === 'ranking') await handleRankingCommand(sock, msg, args);
     else if (command === 'aura') await handleAuraCommand(sock, msg, args, sender, mentioned);
     else if (command === 'farmar') await handleFarmarAuraCommand(sock, msg, sender);
     // ⭐ Sistema de XP
@@ -480,6 +519,50 @@ export async function handleMessages(rawSock, msg) {
     else if (command === 'ocr') await queueManager.enqueueHeavyCommand(from, command, () => handleOcrCommand(sock, msg));
     // 📊 Status da Fila
     else if (['queue', 'filas', 'fila'].includes(command)) await handleQueueStatsCommand(sock, msg);
+    // 🧠 IA Avançada (Memória & Personalidades)
+    else if (command === 'ia' && args.length > 0 && ['modo', 'personality', 'estilo', 'lembra', 'lembrar', 'memorizar', 'memoria', 'memorias', 'esquecer', 'limparmemoria'].includes(args[0]?.toLowerCase())) {
+      await handleAiExtraCommands(sock, msg, command, args, sender);
+    }
+    // 🏦 Banco & Imóveis & Pets
+    else if (['depositar', 'sacar', 'imoveis', 'casas', 'pet', 'pets'].includes(command)) {
+      await handleBankMarketCommands(sock, msg, command, args, sender);
+    }
+    // 🎰 Minigames & Cassino com IA
+    else if (['blackjack', '21', 'poker', 'cacaniquel', 'slots', 'pescar', 'pesca', 'roubar'].includes(command)) {
+      await handleMinigamesCommands(sock, msg, command, args, sender, mentioned);
+    }
+    // 🛡️ Sistema RPG & Raids
+    else if (['guerreiro', 'mago', 'arqueiro', 'classe', 'missao', 'missoes', 'raid', 'chefe'].includes(command)) {
+      await handleRpgSystemCommands(sock, msg, command, args, sender);
+    }
+    // 👥 Reputação & Enquetes & Tickets
+    else if (['rep', 'unrep', 'enquete', 'poll', 'ticket'].includes(command)) {
+      await handleGroupReputationCommands(sock, msg, command, args, sender, mentioned);
+    }
+    // 📱 Downloader Multi-plataforma
+    else if (['pinterest', 'facebook', 'threads', 'spotify', 'twitter', 'download'].includes(command)) {
+      await handleMediaExtraCommands(sock, msg, command, args);
+    }
+    // 🎨 Imagens por IA & Edição
+    else if (['imagem', 'gerarimagem', 'img', 'removerfundo', 'removebg', 'melhorar', 'hd', 'colorir'].includes(command)) {
+      await handleAiImageCommands(sock, msg, command, args);
+    }
+    // 🎙️ Clonagem de Voz
+    else if (['voz', 'clonarvoz'].includes(command)) {
+      await handleVoiceSystemCommands(sock, msg, command, args, sender);
+    }
+    // ⭐ Perfil & Prestígio
+    else if (['prestigio', 'prestige', 'conquistas', 'medalhas', 'avatar'].includes(command)) {
+      await handleProfilePrestigeCommands(sock, msg, command, args, sender);
+    }
+    // 🔥 Eventos Sazonais
+    else if (['evento', 'eventos', 'natal', 'halloween', 'pascoa', 'aniversario'].includes(command)) {
+      await handleEventsSystemCommands(sock, msg, command, args);
+    }
+    // 📦 Loja VIP
+    else if (['lojavip', 'vip'].includes(command)) {
+      await handleVipShopCommands(sock, msg, command, args, sender);
+    }
     // ℹ Informações
     else if (command === 'ping') await handlePingCommand(sock, msg);
     else if (command === 'uptime') await handleUptimeCommand(sock, msg);

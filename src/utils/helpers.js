@@ -88,21 +88,19 @@ if (fs.existsSync('/root/.deno/bin') && !process.env.PATH.includes('/root/.deno/
 function buildBaseArgs(withCookies = true, clientOverride = null) {
   const nodePath = process.execPath;
   
-  // No yt-dlp recente, especificar "deno,node" ou "deno:PATH,node:PATH" habilita o EJS solver
-  let jsRuntimes = 'deno,node';
-  if (fs.existsSync('/root/.deno/bin/deno')) {
-    jsRuntimes = `deno:/root/.deno/bin/deno,node:${nodePath}`;
-  } else {
-    jsRuntimes = `deno,node:${nodePath}`;
-  }
-
   const args = [
     '--no-playlist',
     '--force-ipv4',
     '--geo-bypass',
-    '--js-runtimes', jsRuntimes,
     '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
   ];
+
+  if (fs.existsSync('/root/.deno/bin/deno')) {
+    args.push('--js-runtimes', 'deno:/root/.deno/bin/deno');
+  } else {
+    args.push('--js-runtimes', 'deno');
+  }
+  args.push('--js-runtimes', `node:${nodePath}`);
   
   if (clientOverride) {
     args.push('--extractor-args', `youtube:player_client=${clientOverride}`);
@@ -161,7 +159,7 @@ async function downloadWithYtDlp(url, specificArgs) {
             return await ytdl(url, {
               noPlaylist: true,
               forceIpv4: true,
-              jsRuntimes: 'deno,node',
+              jsRuntimes: 'node',
               ...(fs.existsSync(COOKIES_PATH) ? { cookies: COOKIES_PATH } : {}),
               ...(ffmpegPath && fs.existsSync(ffmpegPath) ? { ffmpegLocation: ffmpegPath } : {}),
             });

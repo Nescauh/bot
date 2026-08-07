@@ -80,6 +80,10 @@ class DatabaseManager {
     const pgUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
     const requirePg = process.env.DATABASE_REQUIRE_POSTGRES === 'true' || process.env.DATABASE_REQUIRE_POSTGRES === '1';
 
+    console.log("[DEBUG] DATABASE_URL existe?", !!process.env.DATABASE_URL);
+    console.log("[DEBUG] POSTGRES_URL existe?", !!process.env.POSTGRES_URL);
+    console.log("[DEBUG] Valor usado:", pgUrl ? "ENCONTRADO" : "NÃO ENCONTRADO");
+
     if (pgUrl) {
       try {
         const pg = await import('pg');

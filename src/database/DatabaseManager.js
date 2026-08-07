@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import initSqlJs from 'sql.js';
 import path from 'path';
 import fs from 'fs';
@@ -10,7 +11,7 @@ const BACKUPS_DIR = path.resolve('backups');
 const KNOWN_USER_KEYS = [
   'jid', 'wallet', 'bank', 'xp', 'level', 'aura',
   'last_daily', 'last_work', 'last_aura_farm', 'daily_streak',
-  'inventory', 'extra_data'
+  'inventory', 'extra_data', 'created_at', 'updated_at'
 ];
 
 const CURRENT_SCHEMA_VERSION = 2;
@@ -78,39 +79,28 @@ class DatabaseManager {
     this.createBackup();
 
     const pgUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-    const requirePg = process.env.DATABASE_REQUIRE_POSTGRES === 'true' || process.env.DATABASE_REQUIRE_POSTGRES === '1';
-
-    console.log("[DEBUG] DATABASE_URL existe?", !!process.env.DATABASE_URL);
-    console.log("[DEBUG] POSTGRES_URL existe?", !!process.env.POSTGRES_URL);
-    console.log("[DEBUG] Valor usado:", pgUrl ? "ENCONTRADO" : "NÃO ENCONTRADO");
 
     if (pgUrl) {
       try {
+        this.log('⏳ Conectando ao Supabase PostgreSQL...');
         const pg = await import('pg');
         const Client = pg.default ? pg.default.Client : pg.Client;
         this.pgClient = new Client({
           connectionString: pgUrl,
-          ssl: process.env.PG_NO_SSL ? false : { rejectUnauthorized: false }
+          ssl: process.env.PG_NO_SSL ? false : { rejectUnauthorized: false },
+          connectionTimeoutMillis: 10000
         });
         await this.pgClient.connect();
         this.isPg = true;
-        this.log('Backend: PostgreSQL');
-        this.log('PostgreSQL conectado.');
+        this.log('Backend: PostgreSQL (Supabase)');
+        this.log('✅ Conectado ao Supabase com sucesso!');
       } catch (err) {
-        this.logErr('Falha ao conectar ao PostgreSQL:', err.message);
-        if (requirePg) {
-          this.logErr('DATABASE_REQUIRE_POSTGRES ativado. Abortando inicialização para evitar perda de dados.', err);
-          throw new Error(`Conexão com PostgreSQL falhou e DATABASE_REQUIRE_POSTGRES=true: ${err.message}`);
-        }
+        this.logErr(`❌ Erro ao conectar ao Supabase: ${err.message}`);
         this.isPg = false;
+        throw new Error(`[DATABASE] Conexão com o Supabase falhou: ${err.message}`);
       }
-    } else if (requirePg) {
-      const msg = 'DATABASE_REQUIRE_POSTGRES=true, mas nenhuma URL de conexão PostgreSQL foi informada.';
-      this.logErr(msg);
-      throw new Error(msg);
-    }
-
-    if (!this.isPg) {
+    } else {
+      this.log('⚠️ Nenhuma DATABASE_URL fornecida. Usando SQLite local.');
       this.log('Backend: SQLite');
       try {
         const SQL = await initSqlJs();
@@ -174,7 +164,9 @@ class DatabaseManager {
         last_aura_farm BIGINT DEFAULT 0,
         daily_streak INTEGER DEFAULT 0,
         inventory TEXT DEFAULT '[]',
-        extra_data TEXT DEFAULT '{}'
+        extra_data TEXT DEFAULT '{}',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );`,
 
       `CREATE TABLE IF NOT EXISTS warns (
@@ -229,7 +221,15 @@ class DatabaseManager {
       }
     }
 
-    if (!this.isPg && this.dbInstance) {
+    if (this.isPg) {
+      const pgAlters = [
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();'
+      ];
+      for (const alt of pgAlters) {
+        try { await this.pgClient.query(alt); } catch (_) {}
+      }
+    } else if (this.dbInstance) {
       const alters = [
         'ALTER TABLE users ADD COLUMN aura BIGINT DEFAULT 0',
         'ALTER TABLE users ADD COLUMN last_aura_farm BIGINT DEFAULT 0',
@@ -754,10 +754,10 @@ class DatabaseManager {
 
       if (this.isPg) {
         await this.pgClient.query(
-          `INSERT INTO users (jid, wallet, bank, xp, level, aura, last_daily, last_work, last_aura_farm, daily_streak, inventory, extra_data)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          `INSERT INTO users (jid, wallet, bank, xp, level, aura, last_daily, last_work, last_aura_farm, daily_streak, inventory, extra_data, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
            ON CONFLICT (jid) DO UPDATE SET
-           wallet = $2, bank = $3, xp = $4, level = $5, aura = $6, last_daily = $7, last_work = $8, last_aura_farm = $9, daily_streak = $10, inventory = $11, extra_data = $12`,
+           wallet = $2, bank = $3, xp = $4, level = $5, aura = $6, last_daily = $7, last_work = $8, last_aura_farm = $9, daily_streak = $10, inventory = $11, extra_data = $12, updated_at = NOW()`,
           [jid, wallet, bank, xp, level, aura, last_daily, last_work, last_aura_farm, daily_streak, inventory, extra_data_str]
         );
       } else if (this.dbInstance) {

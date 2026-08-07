@@ -1,4 +1,5 @@
 import databaseManager from './DatabaseManager.js';
+import userRepository from './UserRepository.js';
 
 export async function initSqlite() {
   await databaseManager.initialize();
@@ -13,11 +14,27 @@ export async function saveStore() {
 }
 
 export function getUser(jid) {
-  return databaseManager.getUser(jid);
+  return userRepository.getUser(jid);
+}
+
+export async function createUser(jid, initialData = {}) {
+  return await userRepository.createUser(jid, initialData);
 }
 
 export async function updateUser(jid, updates) {
-  return await databaseManager.updateUser(jid, updates);
+  return await userRepository.updateUser(jid, updates);
+}
+
+export async function addXP(jid, amount) {
+  return await userRepository.addXP(jid, amount);
+}
+
+export async function addBalance(jid, amount) {
+  return await userRepository.addBalance(jid, amount);
+}
+
+export async function saveUser(user) {
+  return await userRepository.saveUser(user);
 }
 
 export function getTopUsersByWallet(limit = 10) {

@@ -146,68 +146,133 @@ class DatabaseManager {
   }
 
   async createTables() {
-    const queries = [
-      `CREATE TABLE IF NOT EXISTS schema_meta (
-        key TEXT PRIMARY KEY,
-        value TEXT
-      );`,
+    const isPg = this.isPg;
 
-      `CREATE TABLE IF NOT EXISTS users (
-        jid TEXT PRIMARY KEY,
-        wallet BIGINT DEFAULT 0,
-        bank BIGINT DEFAULT 0,
-        xp BIGINT DEFAULT 0,
-        level INTEGER DEFAULT 1,
-        aura BIGINT DEFAULT 0,
-        last_daily BIGINT DEFAULT 0,
-        last_work BIGINT DEFAULT 0,
-        last_aura_farm BIGINT DEFAULT 0,
-        daily_streak INTEGER DEFAULT 0,
-        inventory TEXT DEFAULT '[]',
-        extra_data TEXT DEFAULT '{}',
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      );`,
+    const queries = isPg
+      ? [
+          `CREATE TABLE IF NOT EXISTS schema_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT
+          );`,
 
-      `CREATE TABLE IF NOT EXISTS warns (
-        group_jid TEXT,
-        user_jid TEXT,
-        count INTEGER DEFAULT 0,
-        PRIMARY KEY (group_jid, user_jid)
-      );`,
+          `CREATE TABLE IF NOT EXISTS users (
+            jid TEXT PRIMARY KEY,
+            wallet BIGINT DEFAULT 0,
+            bank BIGINT DEFAULT 0,
+            xp BIGINT DEFAULT 0,
+            level INTEGER DEFAULT 1,
+            aura BIGINT DEFAULT 0,
+            last_daily BIGINT DEFAULT 0,
+            last_work BIGINT DEFAULT 0,
+            last_aura_farm BIGINT DEFAULT 0,
+            daily_streak INTEGER DEFAULT 0,
+            inventory TEXT DEFAULT '[]',
+            extra_data TEXT DEFAULT '{}',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );`,
 
-      `CREATE TABLE IF NOT EXISTS group_configs (
-        group_jid TEXT PRIMARY KEY,
-        antilink INTEGER DEFAULT 0,
-        antispam INTEGER DEFAULT 0,
-        welcome INTEGER DEFAULT 0,
-        rules TEXT DEFAULT '',
-        anti_delete INTEGER DEFAULT 0
-      );`,
+          `CREATE TABLE IF NOT EXISTS warns (
+            group_jid TEXT,
+            user_jid TEXT,
+            count INTEGER DEFAULT 0,
+            PRIMARY KEY (group_jid, user_jid)
+          );`,
 
-      `CREATE TABLE IF NOT EXISTS reminders (
-        id BIGINT PRIMARY KEY,
-        user_jid TEXT,
-        chat_jid TEXT,
-        target_time BIGINT,
-        message TEXT
-      );`,
+          `CREATE TABLE IF NOT EXISTS group_configs (
+            group_jid TEXT PRIMARY KEY,
+            antilink INTEGER DEFAULT 0,
+            antispam INTEGER DEFAULT 0,
+            welcome INTEGER DEFAULT 0,
+            rules TEXT DEFAULT '',
+            anti_delete INTEGER DEFAULT 0
+          );`,
 
-      `CREATE TABLE IF NOT EXISTS casamentos (
-        user_jid TEXT PRIMARY KEY,
-        parceiro_jid TEXT,
-        since BIGINT
-      );`,
+          `CREATE TABLE IF NOT EXISTS reminders (
+            id BIGINT PRIMARY KEY,
+            user_jid TEXT,
+            chat_jid TEXT,
+            target_time BIGINT,
+            message TEXT
+          );`,
 
-      `CREATE TABLE IF NOT EXISTS pedidos_casamento (
-        target_jid TEXT PRIMARY KEY,
-        sender_jid TEXT
-      );`,
+          `CREATE TABLE IF NOT EXISTS casamentos (
+            user_jid TEXT PRIMARY KEY,
+            parceiro_jid TEXT,
+            since BIGINT
+          );`,
 
-      `CREATE TABLE IF NOT EXISTS autorizados_ver (
-        user_jid TEXT PRIMARY KEY
-      );`
-    ];
+          `CREATE TABLE IF NOT EXISTS pedidos_casamento (
+            target_jid TEXT PRIMARY KEY,
+            sender_jid TEXT
+          );`,
+
+          `CREATE TABLE IF NOT EXISTS autorizados_ver (
+            user_jid TEXT PRIMARY KEY
+          );`
+        ]
+      : [
+          `CREATE TABLE IF NOT EXISTS schema_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT
+          );`,
+
+          `CREATE TABLE IF NOT EXISTS users (
+            jid TEXT PRIMARY KEY,
+            wallet INTEGER DEFAULT 0,
+            bank INTEGER DEFAULT 0,
+            xp INTEGER DEFAULT 0,
+            level INTEGER DEFAULT 1,
+            aura INTEGER DEFAULT 0,
+            last_daily INTEGER DEFAULT 0,
+            last_work INTEGER DEFAULT 0,
+            last_aura_farm INTEGER DEFAULT 0,
+            daily_streak INTEGER DEFAULT 0,
+            inventory TEXT DEFAULT '[]',
+            extra_data TEXT DEFAULT '{}',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );`,
+
+          `CREATE TABLE IF NOT EXISTS warns (
+            group_jid TEXT,
+            user_jid TEXT,
+            count INTEGER DEFAULT 0,
+            PRIMARY KEY (group_jid, user_jid)
+          );`,
+
+          `CREATE TABLE IF NOT EXISTS group_configs (
+            group_jid TEXT PRIMARY KEY,
+            antilink INTEGER DEFAULT 0,
+            antispam INTEGER DEFAULT 0,
+            welcome INTEGER DEFAULT 0,
+            rules TEXT DEFAULT '',
+            anti_delete INTEGER DEFAULT 0
+          );`,
+
+          `CREATE TABLE IF NOT EXISTS reminders (
+            id INTEGER PRIMARY KEY,
+            user_jid TEXT,
+            chat_jid TEXT,
+            target_time INTEGER,
+            message TEXT
+          );`,
+
+          `CREATE TABLE IF NOT EXISTS casamentos (
+            user_jid TEXT PRIMARY KEY,
+            parceiro_jid TEXT,
+            since INTEGER
+          );`,
+
+          `CREATE TABLE IF NOT EXISTS pedidos_casamento (
+            target_jid TEXT PRIMARY KEY,
+            sender_jid TEXT
+          );`,
+
+          `CREATE TABLE IF NOT EXISTS autorizados_ver (
+            user_jid TEXT PRIMARY KEY
+          );`
+        ];
 
     for (const q of queries) {
       try {
@@ -231,8 +296,8 @@ class DatabaseManager {
       }
     } else if (this.dbInstance) {
       const alters = [
-        'ALTER TABLE users ADD COLUMN aura BIGINT DEFAULT 0',
-        'ALTER TABLE users ADD COLUMN last_aura_farm BIGINT DEFAULT 0',
+        'ALTER TABLE users ADD COLUMN aura INTEGER DEFAULT 0',
+        'ALTER TABLE users ADD COLUMN last_aura_farm INTEGER DEFAULT 0',
         'ALTER TABLE users ADD COLUMN daily_streak INTEGER DEFAULT 0',
         'ALTER TABLE users ADD COLUMN extra_data TEXT DEFAULT "{}"',
         'ALTER TABLE group_configs ADD COLUMN anti_delete INTEGER DEFAULT 0'

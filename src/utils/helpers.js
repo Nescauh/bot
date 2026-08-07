@@ -70,12 +70,31 @@ function runYtDlpExecFile(args) {
   });
 }
 
+// Sincroniza cookies vindos da variável de ambiente YOUTUBE_COOKIES (se existir)
+if (process.env.YOUTUBE_COOKIES && process.env.YOUTUBE_COOKIES.trim()) {
+  try {
+    fs.writeFileSync(COOKIES_PATH, process.env.YOUTUBE_COOKIES.trim(), 'utf-8');
+  } catch (err) {
+    console.error('Erro ao escrever YOUTUBE_COOKIES no cookies.txt:', err);
+  }
+}
+
+// Adiciona diretório do deno ao PATH se existir
+if (fs.existsSync('/root/.deno/bin') && !process.env.PATH.includes('/root/.deno/bin')) {
+  process.env.PATH = `/root/.deno/bin:${process.env.PATH}`;
+}
+
 // Monta os argumentos base para o yt-dlp ignorar bloqueios de robôs do YouTube em servidores (Railway/Cloud)
 function buildBaseArgs(withCookies = true, clientOverride = null) {
   const nodePath = process.execPath;
-  const jsRuntimes = fs.existsSync('/root/.deno/bin/deno')
-    ? `deno:/root/.deno/bin/deno,deno,node:${nodePath},node`
-    : `deno,node:${nodePath},node`;
+  
+  // No yt-dlp recente, especificar "deno,node" ou "deno:PATH,node:PATH" habilita o EJS solver
+  let jsRuntimes = 'deno,node';
+  if (fs.existsSync('/root/.deno/bin/deno')) {
+    jsRuntimes = `deno:/root/.deno/bin/deno,node:${nodePath}`;
+  } else {
+    jsRuntimes = `deno,node:${nodePath}`;
+  }
 
   const args = [
     '--no-playlist',
@@ -108,32 +127,32 @@ async function downloadWithYtDlp(url, specificArgs) {
     const argsStandard = [url, ...buildBaseArgs(true, null), ...specificArgs];
     return await runYtDlpExecFile(argsStandard);
   } catch (firstError) {
-    console.warn('⚠️ Falha 1 (cookies padrao). Tentando com cookies + cliente android,web...', firstError.message);
+    console.warn('⚠️ Falha 1 (cookies padrao). Tentando com cookies + cliente ios,web...', firstError.message);
     
-    // Tentativa 2: Com cookies + cliente android,web
+    // Tentativa 2: Com cookies + cliente ios,web
     try {
-      const argsAndroid = [url, ...buildBaseArgs(true, 'android,web'), ...specificArgs];
-      return await runYtDlpExecFile(argsAndroid);
+      const argsIos = [url, ...buildBaseArgs(true, 'ios,web'), ...specificArgs];
+      return await runYtDlpExecFile(argsIos);
     } catch (secondError) {
-      console.warn('⚠️ Falha 2 (cookies android). Tentando com cookies + cliente mweb,web...', secondError.message);
+      console.warn('⚠️ Falha 2 (cookies ios). Tentando com cookies + cliente android,web...', secondError.message);
       
-      // Tentativa 3: Com cookies + cliente mweb,web
+      // Tentativa 3: Com cookies + cliente android,web
       try {
-        const argsMweb = [url, ...buildBaseArgs(true, 'mweb,web'), ...specificArgs];
-        return await runYtDlpExecFile(argsMweb);
+        const argsAndroid = [url, ...buildBaseArgs(true, 'android,web'), ...specificArgs];
+        return await runYtDlpExecFile(argsAndroid);
       } catch (thirdError) {
-        console.warn('⚠️ Falha 3 (cookies mweb). Tentando com cookies + cliente android_vr,web...', thirdError.message);
+        console.warn('⚠️ Falha 3 (cookies android). Tentando com cookies + cliente mweb,web...', thirdError.message);
         
-        // Tentativa 4: Com cookies + cliente android_vr,web
+        // Tentativa 4: Com cookies + cliente mweb,web
         try {
-          const argsAndroidVr = [url, ...buildBaseArgs(true, 'android_vr,web'), ...specificArgs];
-          return await runYtDlpExecFile(argsAndroidVr);
+          const argsMweb = [url, ...buildBaseArgs(true, 'mweb,web'), ...specificArgs];
+          return await runYtDlpExecFile(argsMweb);
         } catch (fourthError) {
-          console.warn('⚠️ Falha 4 (cookies android_vr). Tentando sem cookies + cliente android,web...', fourthError.message);
+          console.warn('⚠️ Falha 4 (cookies mweb). Tentando sem cookies + cliente ios,web...', fourthError.message);
           
-          // Tentativa 5: Sem cookies + cliente android,web
+          // Tentativa 5: Sem cookies + cliente ios,web
           try {
-            const argsNoCookies = [url, ...buildBaseArgs(false, 'android,web'), ...specificArgs];
+            const argsNoCookies = [url, ...buildBaseArgs(false, 'ios,web'), ...specificArgs];
             return await runYtDlpExecFile(argsNoCookies);
           } catch (fifthError) {
             console.warn('⚠️ Falha 5 (sem cookies). Tentando wrapper ytdl...', fifthError.message);
@@ -142,7 +161,7 @@ async function downloadWithYtDlp(url, specificArgs) {
             return await ytdl(url, {
               noPlaylist: true,
               forceIpv4: true,
-              jsRuntimes: `node:${process.execPath}`,
+              jsRuntimes: 'deno,node',
               ...(fs.existsSync(COOKIES_PATH) ? { cookies: COOKIES_PATH } : {}),
               ...(ffmpegPath && fs.existsSync(ffmpegPath) ? { ffmpegLocation: ffmpegPath } : {}),
             });

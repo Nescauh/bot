@@ -374,11 +374,37 @@ export async function handleMessages(rawSock, msg) {
                        `「 🔑 」/adm - autorizar alguém a usar /ver (dono)\n` +
                        `「 🚫 」/remover - remover autorização do /ver (dono)\n` +
                        `「 🗑️ 」/antidel on/off - ativar/desativar anti-delete (dono)\n\n` +
-                       `🤖 *IA*\n` +
-                       `「 🧠 」/ia - conversar com Inteligência Artificial\n` +
-                       `「 🌐 」/traduzir - traduzir texto/mensagem\n` +
-                       `「 📝 」/resumir - resumir texto longo\n` +
-                       `「 💡 」/explicar - explicação detalhada de conceitos\n\n` +
+                       `🎰 *MINIGAMES & CASSINO*\n` +
+                       `「 🃏 」/blackjack (ou /21) — 21 contra a banca\n` +
+                       `「 ♠️ 」/poker — rodada de poker com apostas\n` +
+                       `「 🎰 」/cacaniquel (ou /slots) — caça-níqueis animado\n` +
+                       `「 🎣 」/pescar — pescar peixes e tesouros lendários\n` +
+                       `「 🥷 」/roubar — tentar roubar moedas de outro usuário\n\n` +
+                       `🏦 *BANCO, IMÓVEIS & PETS*\n` +
+                       `「 📥 」/depositar — guardar dinheiro no banco com rendimento\n` +
+                       `「 📤 」/sacar — retirar moedas do banco\n` +
+                       `「 🏠 」/imoveis (ou /casas) — comprar e gerenciar imóveis\n` +
+                       `「 🐶 」/pet (ou /pets) — adotar e cuidar do seu mascote\n\n` +
+                       `⚔️ *SISTEMA RPG & RAIDS*\n` +
+                       `「 🛡️ 」/classe — escolher sua classe (Guerreiro, Mago, Arqueiro)\n` +
+                       `「 📜 」/missao — cumprir missões diárias com prêmios\n` +
+                       `「 🐉 」/raid (ou /chefe) — batalha em grupo contra chefões\n\n` +
+                       `🎨 *GERAÇÃO DE MÍDIA & IA*\n` +
+                       `「 🧠 」/ia — conversar com Inteligência Artificial\n` +
+                       `「 🎨 」/imagem — gerar artes e imagens incríveis por IA\n` +
+                       `「 ✂️ 」/removerfundo — remover fundo de imagem/foto\n` +
+                       `「 🔍 」/melhorar (ou /hd) — aprimorar qualidade de fotos\n` +
+                       `「 🎨 」/colorir — colorir imagens em preto e branco\n` +
+                       `「 🎙️ 」/voz (ou /clonarvoz) — sintetizar e clonar voz\n` +
+                       `「 🌐 」/traduzir — traduzir textos/mensagens\n` +
+                       `「 📝 」/resumir — resumir textos longos\n` +
+                       `「 💡 」/explicar — explicações detalhadas de assuntos\n\n` +
+                       `📥 *DOWNLOADERS MULTI-PLATAFORMA*\n` +
+                       `「 📌 」/pinterest — baixar fotos/vídeos do Pinterest\n` +
+                       `「 📘 」/facebook — baixar vídeos do Facebook\n` +
+                       `「 🧵 」/threads — baixar mídias do Threads\n` +
+                       `「 🎧 」/spotify — pesquisar e baixar músicas do Spotify\n` +
+                       `「 🐦 」/twitter — baixar vídeos e mídias do Twitter/X\n\n` +
                        `👥 *ADMINISTRAÇÃO*\n` +
                        `「 🚪 」/kick - expulsar membro do grupo\n` +
                        `「 👑 」/promote - promover membro a admin\n` +
@@ -391,8 +417,10 @@ export async function handleMessages(rawSock, msg) {
                        `「 👋 」/boasvindas - ativar/desativar boas-vindas\n` +
                        `「 📜 」/regras - ver ou definir regras do grupo\n` +
                        `「 ⚠️ 」/warn - dar advertência a um membro\n` +
-                       `「 📋 」/warnings - ver advertências do membro\n\n` +
-                       `🎮 *DIVERSÃO*\n` +
+                       `「 📋 」/warnings - ver advertências do membro\n` +
+                       `「 📊 」/enquete (ou /poll) — criar enquetes votáveis\n` +
+                       `「 🎫 」/ticket — abrir chamado de atendimento\n\n` +
+                       `🎮 *DIVERSÃO & SOCIAL*\n` +
                        `「 👩‍❤️‍👨 」/ship - medir afinidade de casal\n` +
                        `「 🎱 」/8ball - bola 8 mágica de perguntas (IA)\n` +
                        `「 🎲 」/dado - rolar dado (1 a 6)\n` +
@@ -401,7 +429,8 @@ export async function handleMessages(rawSock, msg) {
                        `「 💥 」/roleta - roleta russa animada\n` +
                        `「 🧠 」/quiz - quiz de conhecimentos gerais (IA)\n` +
                        `「 🎯 」/forca - jogo da forca\n` +
-                       `「 🃏 」/tarô - leitura mística de Tarô com IA\n\n` +
+                       `「 🃏 」/tarô - leitura mística de Tarô com IA\n` +
+                       `「 👍 」/rep — dar ponto de reputação a um membro\n\n` +
                        `💰 *ECONOMIA & OSTENTAÇÃO*\n` +
                        `「 🎁 」/daily - recompensa diária com combo + Biscoito da Sorte (IA)\n` +
                        `「 💵 」/saldo - extrato de carteira, banco e status ostentação\n` +
@@ -413,10 +442,17 @@ export async function handleMessages(rawSock, msg) {
                        `「 🏆 」/ranking - top membros mais ricos (Forbes Bot)\n` +
                        `「 ✨ 」/aura - ver seu status espiritual e card de Aura\n` +
                        `「 🧘 」/farmar aura - canalizar e cultivar pontos de Aura (cooldown 15m)\n\n` +
-                       `⭐ *SISTEMA DE XP & PATENTES RPG*\n` +
+                       `⭐ *PERFIL, XP & PRESTÍGIO*\n` +
                        `「 🎖️ 」/level - nível atual, XP e barra de progresso com Patente RPG\n` +
                        `「 📇 」/rank - cartão completo de perfil RPG + lema do guerreiro (IA)\n` +
-                       `「 🌟 」/top - hall da fama das maiores lendas do grupo\n\n` +
+                       `「 🌟 」/top - hall da fama das maiores lendas do grupo\n` +
+                       `「 🥇 」/prestigio — subir nível de prestígio supremo\n` +
+                       `「 🏅 」/conquistas — conquistas desbloqueadas\n` +
+                       `「 🖼️ 」/avatar — personalizar avatar de perfil\n\n` +
+                       `💎 *LOJA VIP & EVENTOS*\n` +
+                       `「 👑 」/vip (ou /lojavip) — loja de benefícios VIP\n` +
+                       `「 🎉 」/evento — eventos sazonais ativos no bot\n` +
+                       `「 ⏳ 」/fila — estatísticas de processamento do bot\n\n` +
                        `👑 *ADMINISTRAÇÃO DA ECONOMIA (DONO)*\n` +
                        `「 💵 」/givesaldo - dar saldo ao usuário\n` +
                        `「 💸 」/removesaldo - remover saldo do usuário\n` +

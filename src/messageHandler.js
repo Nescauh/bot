@@ -6,6 +6,7 @@ import { handleMediaCommands } from './commands/media.js';
 import { getDatabase } from './database.js';
 import { getUser, updateUser, getGroupConfig } from './database/sqlite.js';
 import { formatUptime } from './utils/helpers.js';
+import { calculateBonusRewards } from './utils/bonusCalculator.js';
 import dotenv from 'dotenv';
 
 // Importação dos Novos Módulos de Comandos
@@ -41,7 +42,7 @@ import { handleDailyCommand } from './commands/economy/daily.js';
 import { handleSaldoCommand } from './commands/economy/saldo.js';
 import { handleTrabalharCommand } from './commands/economy/trabalhar.js';
 import { handleTransferirCommand } from './commands/economy/transferir.js';
-import { handleLojaCommand } from './commands/economy/loja.js';
+import { handleLojaCommand, handleLojaRpgCommand } from './commands/economy/loja.js';
 import { handleComprarCommand } from './commands/economy/comprar.js';
 import { handleInventarioCommand } from './commands/economy/inventario.js';
 import { handleRankingCommand } from './commands/economy/ranking.js';
@@ -276,7 +277,9 @@ export async function handleMessages(rawSock, msg) {
     if (Date.now() - lastXpTime > 60000) { // Cooldown de 1 minuto
       xpCooldowns.set(sender, Date.now());
       const userObj = getUser(sender);
-      const earnedXp = Math.floor(Math.random() * 15) + 10;
+      const baseEarnedXp = Math.floor(Math.random() * 15) + 10;
+      const { finalXp: earnedXp } = calculateBonusRewards(userObj, 0, baseEarnedXp, 'chat');
+
       const newXp = userObj.xp + earnedXp;
       const nextLevelXp = Math.pow(userObj.level, 2) * 50;
       let newLevel = userObj.level;
@@ -338,7 +341,7 @@ export async function handleMessages(rawSock, msg) {
       const velocityStr = latency < 0 ? '0.002' : latency;
 
       const menuText = `╔════════════════╗\n` +
-                       ` ✨ SUBARU BOT ✨ \n` +
+                       ` ✨ QUINTUPLETS BOT ✨ \n` +
                        `╚════════════════╝\n` +
                        `─── Comandos Originais ───\n` +
                        `「 🎵 」/play — baixar música (YouTube / TikTok / Instagram)\n` +
@@ -473,24 +476,45 @@ export async function handleMessages(rawSock, msg) {
                        `「 🗣️ 」/tts - texto em áudio (com várias vozes)\n` +
                        `「 📝 」/ocr - extrair texto de fotos\n` +
                        `══════════════════\n` +
-                       `🤖 Bot: SUBARU BOT\n` +
+                       `🤖 Bot: QUINTUPLETS BOT\n` +
                        `⚡ Velocidade: ${velocityStr}s\n` +
                        `🌙 Uptime: ${uptimeStr}\n` +
                        `══════════════════`;
-                         
-       const menuImgPath = path.resolve('assets/menu.jpg');
-       if (fs.existsSync(menuImgPath)) {
-         return sock.sendMessage(from, { image: fs.readFileSync(menuImgPath), caption: menuText }, { quoted: msg });
-       } else {
-         return sock.sendMessage(from, { text: menuText }, { quoted: msg });
-       }
+        const assetsDir = path.resolve('assets');
+        let videoFiles = [];
+
+        if (fs.existsSync(assetsDir)) {
+          const filesInAssets = fs.readdirSync(assetsDir)
+            .filter(file => /\.(mp4|gif|webm)$/i.test(file))
+            .map(file => path.join(assetsDir, file));
+          videoFiles.push(...filesInAssets);
+        }
+
+        const rootDir = path.resolve('.');
+        const filesInRoot = fs.readdirSync(rootDir)
+          .filter(file => /\.(mp4|gif|webm)$/i.test(file) && (file.startsWith('WhatsApp Video') || file.startsWith('menu')))
+          .map(file => path.join(rootDir, file));
+        videoFiles.push(...filesInRoot);
+
+        videoFiles = [...new Set(videoFiles)];
+
+        if (videoFiles.length > 0) {
+          const randomVideoPath = videoFiles[Math.floor(Math.random() * videoFiles.length)];
+          return sock.sendMessage(from, {
+            video: fs.readFileSync(randomVideoPath),
+            caption: menuText,
+            gifPlayback: true
+          }, { quoted: msg });
+        } else {
+          return sock.sendMessage(from, { text: menuText }, { quoted: msg });
+        }
     }
     // 👑 Administração da Economia (Dono)
     else if (['givesaldo', 'removesaldo', 'givexp', 'removexp', 'givelevel', 'removelevel', 'giveaura', 'removeaura', 'resetuser', 'userinfo'].includes(command)) {
       await handleOwnerEconomyCommands(sock, msg, command, args, sender, mentioned);
     }
     // Comandos Sociais Legados
-    else if (['casar', 'aceitar', 'recusar', 'divorcio', 'perfil', 'gay', 'romance', 'corno', 'feio', 'gostoso', 'bebado', 'chato', 'sortudo', 'beijo', 'tapa', 'mamada', 'gozar', '67', 'six7', 'sixenseven', 'sixseven', 'betinha', 'beta', 'mogar', 'mogado', 'mog'].includes(command)) {
+    else if (['casar', 'aceitar', 'recusar', 'divorcio', 'gay', 'romance', 'corno', 'feio', 'gostoso', 'bebado', 'chato', 'sortudo', 'beijo', 'tapa', 'mamada', 'gozar', '67', 'six7', 'sixenseven', 'sixseven', 'betinha', 'beta', 'mogar', 'mogado', 'mog'].includes(command)) {
       await handleSocialCommands(sock, msg, command, args, sender, mentioned);
     } 
     // Comandos de Administração Legados
@@ -535,14 +559,15 @@ export async function handleMessages(rawSock, msg) {
     else if (command === 'trabalhar') await handleTrabalharCommand(sock, msg, sender);
     else if (command === 'transferir') await handleTransferirCommand(sock, msg, args, sender, mentioned);
     else if (command === 'loja') await handleLojaCommand(sock, msg);
+    else if (['lojarpg', 'armas', 'armaduras'].includes(command)) await handleLojaRpgCommand(sock, msg);
     else if (command === 'comprar') await handleComprarCommand(sock, msg, args, sender);
     else if (command === 'inventario') await handleInventarioCommand(sock, msg, sender, mentioned);
     else if (command === 'ranking') await handleRankingCommand(sock, msg, args);
     else if (command === 'aura') await handleAuraCommand(sock, msg, args, sender, mentioned);
     else if (command === 'farmar') await handleFarmarAuraCommand(sock, msg, sender);
-    // ⭐ Sistema de XP
+    // ⭐ Sistema de XP & Perfil Unificado
     else if (command === 'level') await handleLevelCommand(sock, msg, sender, mentioned);
-    else if (command === 'rank') await handleRankCommand(sock, msg, sender, mentioned);
+    else if (['rank', 'perfil', 'ficha', 'status', 'userinfo'].includes(command)) await handleRankCommand(sock, msg, sender, mentioned);
     else if (command === 'top') await handleTopCommand(sock, msg);
     // 🛠 Utilidades
     else if (command === 'cep') await handleCepCommand(sock, msg, args);
@@ -568,7 +593,7 @@ export async function handleMessages(rawSock, msg) {
       await handleMinigamesCommands(sock, msg, command, args, sender, mentioned);
     }
     // 🛡️ Sistema RPG & Raids
-    else if (['guerreiro', 'mago', 'arqueiro', 'classe', 'missao', 'missoes', 'raid', 'chefe'].includes(command)) {
+    else if (['guerreiro', 'mago', 'arqueiro', 'classe', 'missao', 'missoes', 'raid', 'chefe', 'curar', 'heal'].includes(command)) {
       await handleRpgSystemCommands(sock, msg, command, args, sender);
     }
     // 👥 Reputação & Enquetes & Tickets

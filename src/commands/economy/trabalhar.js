@@ -1,5 +1,6 @@
 import { getUser, updateUser } from '../../database/sqlite.js';
 import { askAi } from '../../utils/aiService.js';
+import { calculateBonusRewards } from '../../utils/bonusCalculator.js';
 
 const fallbackJobs = [
   'desenvolveu um bot secreto para o WhatsApp de uma grande empresa',
@@ -25,8 +26,9 @@ export async function handleTrabalharCommand(sock, msg, sender) {
     return sock.sendMessage(from, { text: `⏳ *VOCÊ ESTÁ CANSADO!*\n\nSeus músculos precisam de descanso! Aguarde *${minutes}m ${seconds}s* para pegar outro turno de trabalho.` }, { quoted: msg });
   }
 
-  const earnedCoins = Math.floor(Math.random() * 350) + 150; // $150 a $500
-  const earnedXp = Math.floor(Math.random() * 30) + 20; // 20 a 50 XP
+  const baseCoins = Math.floor(Math.random() * 350) + 150; // $150 a $500
+  const baseXp = Math.floor(Math.random() * 30) + 20; // 20 a 50 XP
+  const { finalCoins, finalXp, bonusCoinsApplied, bonusXpApplied } = calculateBonusRewards(user, baseCoins, baseXp, 'work');
 
   let jobStory = '';
   try {
@@ -40,8 +42,8 @@ export async function handleTrabalharCommand(sock, msg, sender) {
     jobStory = fallbackJobs[Math.floor(Math.random() * fallbackJobs.length)];
   }
 
-  const newWallet = user.wallet + earnedCoins;
-  const newXp = user.xp + earnedXp;
+  const newWallet = user.wallet + finalCoins;
+  const newXp = user.xp + finalXp;
   const nextLevelXp = Math.pow(user.level, 2) * 50;
   let newLevel = user.level;
   let levelUpMsg = '';
@@ -58,11 +60,14 @@ export async function handleTrabalharCommand(sock, msg, sender) {
     last_work: now
   });
 
+  const bonusCoinsStr = bonusCoinsApplied > 0 ? ` *(+$${bonusCoinsApplied.toLocaleString('pt-BR')} bônus)*` : '';
+  const bonusXpStr = bonusXpApplied > 0 ? ` *(+${bonusXpApplied} XP bônus)*` : '';
+
   const text = `💼 *RELATÓRIO DE TRABALHO (IA)* 💼\n\n` +
                `📖 *O que aconteceu:* Você ${jobStory}!\n\n` +
-               `💰 *Salário:* +$${earnedCoins} moedas\n` +
-               `✨ *Experiência:* +${earnedXp} XP\n` +
-               `💵 *Carteira Atual:* *$${newWallet}*${levelUpMsg}`;
+               `💰 *Salário:* +$${finalCoins.toLocaleString('pt-BR')} moedas${bonusCoinsStr}\n` +
+               `✨ *Experiência:* +${finalXp} XP${bonusXpStr}\n` +
+               `💵 *Carteira Atual:* *$${newWallet.toLocaleString('pt-BR')}*${levelUpMsg}`;
 
   return sock.sendMessage(from, { text }, { quoted: msg });
 }

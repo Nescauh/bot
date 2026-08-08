@@ -1,5 +1,6 @@
 import { getUser, updateUser } from '../database/sqlite.js';
 import { askAi } from '../utils/aiService.js';
+import { calculateBonusRewards } from '../utils/bonusCalculator.js';
 
 async function getAiCommentary(prompt, sysInstruction) {
   try {
@@ -44,9 +45,12 @@ export async function handleMinigamesCommands(sock, msg, command, args, sender, 
       }
 
       let netProfit = 0;
+      let xpEarned = 0;
       if (won) {
-        netProfit = bet;
-        updateUser(sender, { wallet: user.wallet + netProfit });
+        const { finalCoins, finalXp } = calculateBonusRewards(user, bet, 20, 'blackjack');
+        netProfit = finalCoins;
+        xpEarned = finalXp;
+        updateUser(sender, { wallet: user.wallet + netProfit, xp: user.xp + xpEarned });
       } else if (!draw) {
         netProfit = -bet;
         updateUser(sender, { wallet: Math.max(0, user.wallet - bet) });
@@ -59,7 +63,7 @@ export async function handleMinigamesCommands(sock, msg, command, args, sender, 
       const text = `🃏 *BLACKJACK (21) CASSINO IA* 🃏\n\n` +
                    `🎴 *Suas Cartas:* [${pCard1}] [${pCard2}] ➔ *Total: ${playerTotal}*\n` +
                    `🎰 *Mesa do Crupiê:* [${dCard1}] [${dCard2}] ➔ *Total: ${dealerTotal}*\n\n` +
-                   `${won ? `🎉 *VOCÊ VENCEU!* (+$${bet.toLocaleString('pt-BR')})` : draw ? '⚖️ *EMPATE!* Sua aposta foi devolvida.' : `💥 *VOCÊ PERDEU!* (-$${bet.toLocaleString('pt-BR')})`}\n\n` +
+                   `${won ? `🎉 *VOCÊ VENCEU!* (+$${netProfit.toLocaleString('pt-BR')} moedas | +${xpEarned} XP)` : draw ? '⚖️ *EMPATE!* Sua aposta foi devolvida.' : `💥 *VOCÊ PERDEU!* (-$${bet.toLocaleString('pt-BR')})`}\n\n` +
                    `💬 *Comentário do Crupiê (IA):*\n_"${aiStory}"_`;
 
       return reply(text);
@@ -77,9 +81,13 @@ export async function handleMinigamesCommands(sock, msg, command, args, sender, 
       const draw = playerHandIdx === botHandIdx;
 
       let gain = 0;
+      let xpEarned = 0;
       if (won) {
-        gain = Math.floor(bet * (1.5 + (playerHandIdx * 0.3)));
-        updateUser(sender, { wallet: user.wallet + gain });
+        const rawGain = Math.floor(bet * (1.5 + (playerHandIdx * 0.3)));
+        const { finalCoins, finalXp } = calculateBonusRewards(user, rawGain, 25, 'poker');
+        gain = finalCoins;
+        xpEarned = finalXp;
+        updateUser(sender, { wallet: user.wallet + gain, xp: user.xp + xpEarned });
       } else if (!draw) {
         updateUser(sender, { wallet: Math.max(0, user.wallet - bet) });
       }
@@ -91,7 +99,7 @@ export async function handleMinigamesCommands(sock, msg, command, args, sender, 
       const text = `♠️ *MESA DE POKER HIGH ROLLER IA* ♠️\n\n` +
                    `🎴 *Sua Mão:* **${hands[playerHandIdx]}**\n` +
                    `🤖 *Mão da Banca:* **${hands[botHandIdx]}**\n\n` +
-                   `${won ? `🏆 *VITÓRIA NO POKER!* (+$${gain.toLocaleString('pt-BR')})` : draw ? '⚖️ *EMPATE!* Aposta devolvida.' : `💸 *PERDEU A MÃO!* (-$${bet.toLocaleString('pt-BR')})`}\n\n` +
+                   `${won ? `🏆 *VITÓRIA NO POKER!* (+$${gain.toLocaleString('pt-BR')} moedas | +${xpEarned} XP)` : draw ? '⚖️ *EMPATE!* Aposta devolvida.' : `💸 *PERDEU A MÃO!* (-$${bet.toLocaleString('pt-BR')})`}\n\n` +
                    `🎙️ *Narrador de Poker (IA):*\n_"${aiStory}"_`;
 
       return reply(text);
@@ -114,9 +122,14 @@ export async function handleMinigamesCommands(sock, msg, command, args, sender, 
         multiplier = 2;
       }
 
-      const profit = bet * multiplier;
+      let profit = 0;
+      let xpEarned = 0;
       if (multiplier > 0) {
-        updateUser(sender, { wallet: user.wallet + profit });
+        const rawProfit = bet * multiplier;
+        const { finalCoins, finalXp } = calculateBonusRewards(user, rawProfit, 15, 'slots');
+        profit = finalCoins;
+        xpEarned = finalXp;
+        updateUser(sender, { wallet: user.wallet + profit, xp: user.xp + xpEarned });
       } else {
         updateUser(sender, { wallet: Math.max(0, user.wallet - bet) });
       }
@@ -129,7 +142,7 @@ export async function handleMinigamesCommands(sock, msg, command, args, sender, 
                    `╔═════════════╗\n` +
                    `  [ ${s1} | ${s2} | ${s3} ]  \n` +
                    `╚═════════════╝\n\n` +
-                   `${multiplier > 0 ? `🎉 *JACKPOT!* Ganhou **${multiplier}x** (+$${profit.toLocaleString('pt-BR')})` : `💔 *NÃO FOI DESSA VEZ!* (-$${bet.toLocaleString('pt-BR')})`}\n\n` +
+                   `${multiplier > 0 ? `🎉 *JACKPOT!* Ganhou **${multiplier}x** (+$${profit.toLocaleString('pt-BR')} moedas | +${xpEarned} XP)` : `💔 *NÃO FOI DESSA VEZ!* (-$${bet.toLocaleString('pt-BR')})`}\n\n` +
                    `✨ *Voz da Roleta (IA):*\n_"${aiStory}"_`;
 
       return reply(text);
@@ -147,17 +160,24 @@ export async function handleMinigamesCommands(sock, msg, command, args, sender, 
       ];
 
       const item = catches[Math.floor(Math.random() * catches.length)];
-      const newWallet = user.wallet + item.val;
-      updateUser(sender, { wallet: newWallet });
+      const { finalCoins, finalXp, bonusCoinsApplied, bonusXpApplied } = calculateBonusRewards(user, item.val, 15, 'fishing');
+
+      const newWallet = user.wallet + finalCoins;
+      const newXp = user.xp + finalXp;
+      updateUser(sender, { wallet: newWallet, xp: newXp });
 
       const sys = 'Você é um velho pescador lendário e contador de histórias à beira do rio. Escreva 1 frase pitoresca de 15 palavras sobre o momento da fisgada. Sem aspas.';
       const prompt = `O pescador jogou a linha e fisgou um(a): ${item.name} valendo ${item.val} moedas.`;
       const aiStory = await getAiCommentary(prompt, sys) || 'A vara curvou forte e a água espumou!';
 
+      const bonusCoinsStr = bonusCoinsApplied > 0 ? ` *(+$${bonusCoinsApplied.toLocaleString('pt-BR')} bônus)*` : '';
+      const bonusXpStr = bonusXpApplied > 0 ? ` *(+${bonusXpApplied} XP bônus)*` : '';
+
       const text = `🎣 *EXPEDIÇÃO DE PESCA IA* 🎣\n\n` +
-                   `🌊 Você jogou a anzol no lago e fisgou:\n` +
+                   `🌊 Você jogou o anzol no lago e fisgou:\n` +
                    `👉 **${item.name}**!\n` +
-                   `💰 *Valor de Venda:* +$${item.val.toLocaleString('pt-BR')}\n\n` +
+                   `💰 *Valor de Venda:* +$${finalCoins.toLocaleString('pt-BR')} moedas${bonusCoinsStr}\n` +
+                   `✨ *XP da Pesca:* +${finalXp} XP${bonusXpStr}\n\n` +
                    `📜 *Relato do Velho Pescador (IA):*\n_"${aiStory}"_`;
 
       return reply(text);
@@ -180,16 +200,21 @@ export async function handleMinigamesCommands(sock, msg, command, args, sender, 
       let mentions = [sender, target];
 
       if (success) {
-        const amountStolen = Math.floor(targetUser.wallet * (Math.random() * 0.3 + 0.1)); // 10% a 40% da carteira
-        updateUser(target, { wallet: Math.max(0, targetUser.wallet - amountStolen) });
-        updateUser(sender, { wallet: user.wallet + amountStolen });
+        const rawStolen = Math.floor(targetUser.wallet * (Math.random() * 0.3 + 0.1)); // 10% a 40% da carteira
+        const { finalCoins, finalXp, bonusCoinsApplied } = calculateBonusRewards(user, rawStolen, 25, 'steal');
+
+        updateUser(target, { wallet: Math.max(0, targetUser.wallet - rawStolen) });
+        updateUser(sender, { wallet: user.wallet + finalCoins, xp: user.xp + finalXp });
 
         const sys = 'Você é um narrador de filmes de assalto à banco e ação policial. Escreva 1 relato engraçado e ágil de 18 palavras sobre um roubo bem sucedido. Sem aspas.';
-        const prompt = `O assaltante @${sender.split('@')[0]} roubou $${amountStolen} da carteira de @${target.split('@')[0]} e escapou num carro rápido.`;
+        const prompt = `O assaltante @${sender.split('@')[0]} roubou $${finalCoins} da carteira de @${target.split('@')[0]} e escapou num carro rápido.`;
         const aiStory = await getAiCommentary(prompt, sys) || 'Fuga perfeita em alta velocidade!';
 
+        const bonusCoinsStr = bonusCoinsApplied > 0 ? ` *(+$${bonusCoinsApplied.toLocaleString('pt-BR')} bônus Guerreiro/Evento)*` : '';
+
         text = `🥷 *ASSALTO BEM SUCEDIDO!* 🥷\n\n` +
-               `💰 @${sender.split('@')[0]} passou a perna e roubou **$${amountStolen.toLocaleString('pt-BR')}** de @${target.split('@')[0]}!\n\n` +
+               `💰 @${sender.split('@')[0]} passou a perna e roubou **$${finalCoins.toLocaleString('pt-BR')}** de @${target.split('@')[0]}!${bonusCoinsStr}\n` +
+               `✨ *XP da Operação:* +${finalXp} XP\n\n` +
                `🚨 *Relato do Assalto (IA):*\n_"${aiStory}"_`;
       } else {
         const fine = Math.floor(user.wallet * 0.2) + 500;

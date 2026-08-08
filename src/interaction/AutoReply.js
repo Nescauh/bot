@@ -104,7 +104,7 @@ export class AutoReply {
     const quotedParticipant = contextInfo?.participant || '';
 
     // 1. Verificação de Menção ao Bot
-    const isMentionedByName = /@subarubot/i.test(text);
+    const isMentionedByName = /@quintupletsbot/i.test(text);
     const isMentionedByJid = botJid && mentionedJids.includes(botJid);
     const isMentioned = isMentionedByName || isMentionedByJid;
 
@@ -116,8 +116,8 @@ export class AutoReply {
 
     // Se for conversa privada (PV/DM) OU se foi mencionado diretamente ou teve mensagem citada -> Resposta via IA com contexto total
     if (!isGroup || isMentioned || isReplyingToBot) {
-      // Remove a tag @SubaruBot do prompt para não poluir
-      const cleanPrompt = text.replace(/@subarubot/gi, '').trim() || 'Olá!';
+      // Remove a tag @QuintupletsBot do prompt para não poluir
+      const cleanPrompt = text.replace(/@quintupletsbot/gi, '').trim() || 'Olá!';
 
       await sock.sendPresenceUpdate?.('composing', from).catch(() => {});
 
@@ -132,7 +132,7 @@ export class AutoReply {
           conversationMemory.addMessage(from, {
             id: sentMsg.key.id,
             sender: botJid,
-            senderName: 'Subaru Bot',
+            senderName: 'Quintuplets Bot',
             text: replyText,
             timestamp: Math.floor(Date.now() / 1000),
             isBot: true
@@ -178,7 +178,7 @@ export class AutoReply {
               conversationMemory.addMessage(from, {
                 id: sentMsg.key.id,
                 sender: botJid,
-                senderName: 'Subaru Bot',
+                senderName: 'Quintuplets Bot',
                 text: randomReply,
                 timestamp: Math.floor(Date.now() / 1000),
                 isBot: true

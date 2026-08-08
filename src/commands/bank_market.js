@@ -1,4 +1,5 @@
 import { getUser, updateUser } from '../database/sqlite.js';
+import { EXTENDED_PETS } from '../utils/bonusCalculator.js';
 
 export const HOUSES = {
   casa: { name: '🏠 Casa de Bairro', price: 15000, dailyBonus: 1000 },
@@ -6,11 +7,7 @@ export const HOUSES = {
   mansao: { name: '🏰 Mansão de Alto Padrão', price: 200000, dailyBonus: 12000 }
 };
 
-export const PETS = {
-  cachorro: { name: '🐶 Cachorro Fiel', price: 5000, baseIncome: 300 },
-  gato: { name: '🐱 Gato Místico', price: 8000, baseIncome: 500 },
-  dragao: { name: '🐉 Bebê Dragão', price: 50000, baseIncome: 3000 }
-};
+export const PETS = EXTENDED_PETS;
 
 export async function handleBankMarketCommands(sock, msg, command, args, sender) {
   const from = msg.key.remoteJid;
@@ -198,13 +195,15 @@ export async function handleBankMarketCommands(sock, msg, command, args, sender)
 
       // Status do Pet
       if (!extraData.pet) {
-        let petCatalog = Object.keys(PETS).map(k => `• *${PETS[k].name}* — $${PETS[k].price.toLocaleString('pt-BR')} (Compre com: \`/pet comprar ${k}\`)`).join('\n');
-        return reply(`🐾 *SISTEMA DE PETS* 🐾\n\nVocê ainda não possui um pet companheiro!\n\n*Pets disponíveis:*\n${petCatalog}`);
+        let petCatalog = Object.keys(PETS).map(k => `• *${PETS[k].name}* — $${PETS[k].price.toLocaleString('pt-BR')}\n  ✨ *Habilidade:* ${PETS[k].desc}\n  👉 Adote com: \`/pet comprar ${k}\``).join('\n\n');
+        return reply(`🐾 *SISTEMA DE PETS RPG* 🐾\n\nVocê ainda não possui um pet companheiro!\n\n*Pets disponíveis com habilidades especiais:*\n\n${petCatalog}`);
       }
 
       const p = extraData.pet;
+      const petSpec = PETS[p.type] || { name: p.name, desc: 'Pet companheiro' };
       return reply(`🐾 *STATUS DO SEU PET* 🐾\n\n` +
-                   `🐶 *Espécie:* ${PETS[p.type]?.name || p.name}\n` +
+                   `🐶 *Companheiro:* ${petSpec.name}\n` +
+                   `✨ *Habilidade Passiva:* ${petSpec.desc}\n` +
                    `❤️ *Felicidade:* ${p.happiness || 50}%\n\n` +
                    `💡 *Comandos:* \`/pet alimentar\` | \`/pet brincar\``);
     }

@@ -180,7 +180,7 @@ export async function handleMediaCommands(sock, msg, command, args, sender) {
         } else {
           // Imagem estática
           const sticker = new Sticker(filePath, {
-            pack: 'SUBARU BOT 🤖',
+            pack: 'Quintuplets Bot 🤖',
             author: 'Bot de Whatsapp',
             type: StickerTypes.FULL,
             quality: 60

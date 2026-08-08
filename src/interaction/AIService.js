@@ -1,6 +1,6 @@
 /**
  * AIService.js
- * Módulo de interação com a Inteligência Artificial para o Subaru Bot.
+ * Módulo de interação com a Inteligência Artificial para o Quintuplets Bot.
  */
 
 import { askAi } from '../utils/aiService.js';
@@ -19,10 +19,10 @@ export class AIService {
         context.groupName,
         context.userName,
         context.userFacts,
-        'Subaru Bot'
+        'Quintuplets Bot'
       );
 
-      const fullPrompt = `HISTÓRICO RECENTE DA CONVERSA (Grupo: "${context.groupName}" | Horário: ${context.timeContext}):\n${context.history}\n\nMENSAGEM ATUAL DE ${context.userName}:\n"${userPrompt}"\n\nResponda diretamente a ${context.userName} como Subaru Bot, mantendo o contexto inteiro da conversa acima.`;
+      const fullPrompt = `HISTÓRICO RECENTE DA CONVERSA (Grupo: "${context.groupName}" | Horário: ${context.timeContext}):\n${context.history}\n\nMENSAGEM ATUAL DE ${context.userName}:\n"${userPrompt}"\n\nResponda diretamente a ${context.userName} como Quintuplets Bot, mantendo o contexto inteiro da conversa acima.`;
 
       const response = await askAi(fullPrompt, systemInstruction);
 
@@ -32,8 +32,8 @@ export class AIService {
 
       // Limpa possíveis prefixos robóticos que algumas IAs colocam
       let cleaned = response
-        .replace(/^Subaru Bot:\s*/i, '')
-        .replace(/^\[Subaru Bot\]:\s*/i, '')
+        .replace(/^Quintuplets Bot:\s*/i, '')
+        .replace(/^\[Quintuplets Bot\]:\s*/i, '')
         .replace(/^Bot:\s*/i, '')
         .trim();
 

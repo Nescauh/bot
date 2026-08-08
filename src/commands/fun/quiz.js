@@ -1,5 +1,6 @@
 import { getUser, updateUser } from '../../database/sqlite.js';
 import { askAi } from '../../utils/aiService.js';
+import { calculateBonusRewards } from '../../utils/bonusCalculator.js';
 
 const fallbackQuestions = [
   { question: 'Qual o maior planeta do Sistema Solar?', answer: 'júpiter', altAnswers: ['jupiter'], options: ['Terra', 'Júpiter', 'Saturno', 'Marte'] },
@@ -109,20 +110,21 @@ export async function processQuizAnswer(sock, msg, from, userResponse, sender) {
   if (isCorrect) {
     activeQuizGames.delete(from);
 
-    // Recompensa o jogador com moedas e XP no banco unificado
+    // Recompensa o jogador com moedas e XP no banco unificado com bônus aplicados
     const userObj = getUser(sender);
-    const rewardCoins = 200;
-    const rewardXp = 50;
+    const { finalCoins: rewardCoins, finalXp: rewardXp, bonusCoinsApplied, bonusXpApplied } = calculateBonusRewards(userObj, 200, 50, 'quiz');
 
     updateUser(sender, {
       wallet: userObj.wallet + rewardCoins,
       xp: userObj.xp + rewardXp
     });
 
+    const bonusStr = (bonusCoinsApplied > 0 || bonusXpApplied > 0) ? ` *(com bônus de classe/evento!)*` : '';
+
     const text = `🎉 *RESPOSTA CORRETA!* @${sender.split('@')[0]} acertou em cheio!\n\n` +
                  `❓ *Pergunta:* ${activeQuiz.question}\n` +
                  `✅ *Resposta:* *${activeQuiz.answer.toUpperCase()}*\n\n` +
-                 `🎁 *Prêmio:* +$${rewardCoins} moedas e +${rewardXp} XP! 🏆`;
+                 `🎁 *Prêmio:* +$${rewardCoins.toLocaleString('pt-BR')} moedas e +${rewardXp} XP!${bonusStr} 🏆`;
 
     await sock.sendMessage(from, { text, mentions: [sender] }, { quoted: msg });
     return true;

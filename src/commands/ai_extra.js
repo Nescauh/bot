@@ -19,7 +19,7 @@ export const AI_MODES = {
   },
   padrao: {
     name: '🤖 Modo Padrão',
-    system: 'Você é o SUBARU BOT, um assistente virtual útil, inteligente, rápido e amigável para WhatsApp.'
+    system: 'Você é o Quintuplets Bot, um assistente virtual útil, inteligente, rápido e amigável para WhatsApp.'
   }
 };
 

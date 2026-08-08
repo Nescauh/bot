@@ -1,10 +1,11 @@
 import { getUser, updateUser } from '../database/sqlite.js';
 import { askAi } from '../utils/aiService.js';
+import { calculateBonusRewards, getUserStats } from '../utils/bonusCalculator.js';
 
 export const RPG_CLASSES = {
-  guerreiro: { name: '⚔️ Guerreiro de Aço', hp: 200, atk: 35, bonusMsg: 'Mais força em duelos e roubos!' },
-  mago: { name: '🔮 Mago Arcano', hp: 130, atk: 55, bonusMsg: 'Mais inteligência e ganho de XP!' },
-  arqueiro: { name: '🏹 Arqueiro Elfo', hp: 150, atk: 45, bonusMsg: 'Mais agilidade e sorte na pesca e minijogos!' }
+  guerreiro: { name: '⚔️ Guerreiro de Aço', hp: 200, atk: 35, bonusMsg: 'Mais força (+25% moedas em combate, roubo, raid e missões)!' },
+  mago: { name: '🔮 Mago Arcano', hp: 130, atk: 55, bonusMsg: 'Mais inteligência (+30% XP bônus em TODAS as atividades)!' },
+  arqueiro: { name: '🏹 Arqueiro Elfo', hp: 150, atk: 45, bonusMsg: 'Mais agilidade (+25% moedas em pesca e minijogos)!' }
 };
 
 // Armazena o Chefe Ativo por chat (Group Raid)
@@ -32,25 +33,65 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
     extraData = {};
   }
 
+  const userStats = getUserStats(user);
+
   switch (command) {
+    case 'curar':
+    case 'heal': {
+      const now = Date.now();
+      const HEAL_COOLDOWN = 15 * 60 * 1000; // 15 min de descanso
+      const lastHeal = extraData.last_heal_time || 0;
+
+      let inventory = [];
+      try { inventory = JSON.parse(user.inventory || '[]'); } catch (_) {}
+      const potionIdx = inventory.findIndex(i => i.includes('Poção de HP') || i.includes('Cura'));
+
+      if (potionIdx !== -1) {
+        inventory.splice(potionIdx, 1);
+        extraData.current_hp = userStats.maxHp;
+        extraData.last_heal_time = now;
+        updateUser(sender, { inventory: JSON.stringify(inventory), extra_data: JSON.stringify(extraData) });
+        return reply(`🧪 *POÇÃO DE CURA USADA!*\n\nSeu HP foi totalmente restaurado para **${userStats.maxHp}/${userStats.maxHp} HP**! ❤️`);
+      }
+
+      if (now - lastHeal < HEAL_COOLDOWN && userStats.isKnockedOut) {
+        const remaining = HEAL_COOLDOWN - (now - lastHeal);
+        const minutes = Math.floor(remaining / (1000 * 60));
+        const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+        return reply(`⏳ *DESCANSO EM ANDAMENTO!*\n\nVocê está nocauteado. Aguarde **${minutes}m ${seconds}s** de descanso ou compre uma \`Poção de HP\` na \`/loja\`!`);
+      }
+
+      extraData.current_hp = userStats.maxHp;
+      extraData.last_heal_time = now;
+      updateUser(sender, { extra_data: JSON.stringify(extraData) });
+
+      return reply(`🩺 *REGENERAÇÃO CONCLUÍDA!*\n\nVocê descansou e recuperou seu vigor! ❤️ **HP:** ${userStats.maxHp}/${userStats.maxHp}`);
+    }
+
     case 'guerreiro':
     case 'mago':
     case 'arqueiro':
     case 'classe': {
       let chosenClass = command === 'classe' ? args[0]?.toLowerCase() : command;
       if (!chosenClass || !RPG_CLASSES[chosenClass]) {
-        let catalog = Object.keys(RPG_CLASSES).map(c => `• *${RPG_CLASSES[c].name}*\n  ⚔️ Ataque: ${RPG_CLASSES[c].atk} | ❤️ Vida: ${RPG_CLASSES[c].hp}\n  ✨ Bônus: ${RPG_CLASSES[c].bonusMsg}\n  👉 Escolha com: \`/classe ${c}\``).join('\n\n');
-        return reply(`🛡️ *SISTEMA DE CLASSES RPG* 🛡️\n\nClasse atual: *${extraData.rpg_class ? RPG_CLASSES[extraData.rpg_class]?.name : 'Nenhuma'}*\n\nEscolha sua classe:\n\n${catalog}`);
+        let catalog = Object.keys(RPG_CLASSES).map(c => `• *${RPG_CLASSES[c].name}*\n  ⚔️ Ataque: ${userStats.classInfo.atk} | ❤️ Vida: ${userStats.classInfo.hp}\n  ✨ Tier Atual: ${userStats.classInfo.name}\n  👉 Escolha com: \`/classe ${c}\``).join('\n\n');
+        return reply(`🛡️ *SISTEMA DE CLASSES RPG* 🛡️\n\nClasse atual: *${userStats.classInfo.name}* (Nível ${user.level})\n\nEscolha sua classe:\n\n${catalog}`);
       }
 
       extraData.rpg_class = chosenClass;
       updateUser(sender, { extra_data: JSON.stringify(extraData) });
 
-      return reply(`🛡️ *CLASSE DEFINIDA COM SUCESSO!*\n\nVocê agora é um **${RPG_CLASSES[chosenClass].name}**!\n⚔️ *Ataque Base:* ${RPG_CLASSES[chosenClass].atk}\n❤️ *HP Base:* ${RPG_CLASSES[chosenClass].hp}\n✨ *Benefício:* ${RPG_CLASSES[chosenClass].bonusMsg}`);
+      const newStats = getUserStats(getUser(sender));
+
+      return reply(`🛡️ *CLASSE DEFINIDA COM SUCESSO!*\n\nVocê agora é um **${newStats.classInfo.name}**!\n⚔️ *Ataque Base:* ${newStats.classInfo.atk}\n❤️ *HP Máximo:* ${newStats.maxHp}\n✨ *Benefício:* Seus bônus de classe evoluem conforme seu Nível RPG!`);
     }
 
     case 'missao':
     case 'missoes': {
+      if (userStats.isKnockedOut) {
+        return reply(`💀 *VOCÊ ESTÁ NOCAUTEADO (K.O.)!*\n\nSeu HP é 0/${userStats.maxHp}. Use \`/curar\` para descansar ou tome uma \`Poção de HP\` da loja antes de ir a uma missão!`);
+      }
+
       const quests = [
         { title: '📜 Caça ao Dragão Vermelho', rewardMoney: 2500, rewardXp: 300 },
         { title: '📜 Resgate do Amuleto Sagrado', rewardMoney: 1800, rewardXp: 200 },
@@ -59,20 +100,24 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
       ];
 
       const quest = quests[Math.floor(Math.random() * quests.length)];
-      const userClass = RPG_CLASSES[extraData.rpg_class || 'guerreiro'];
 
-      const newWallet = user.wallet + quest.rewardMoney;
-      const newXp = user.xp + quest.rewardXp;
+      const { finalCoins, finalXp, bonusCoinsApplied, bonusXpApplied } = calculateBonusRewards(user, quest.rewardMoney, quest.rewardXp, 'quest');
+
+      const newWallet = user.wallet + finalCoins;
+      const newXp = user.xp + finalXp;
       updateUser(sender, { wallet: newWallet, xp: newXp });
 
       const sys = 'Você é um Mestre de Guilda RPG épico em um jogo de aventura medieval. Escreva 1 relato dinâmico de 20 palavras sobre o cumprimento da missão. Sem aspas.';
-      const prompt = `O ${userClass.name} completou a missão "${quest.title}" usando suas habilidades.`;
+      const prompt = `O guerreiro completou a missão "${quest.title}" usando suas habilidades.`;
       const aiStory = await getAiNarrative(prompt, sys) || 'Vitória épica conquistada nas profundezas da masmorra!';
+
+      const bonusCoinsStr = bonusCoinsApplied > 0 ? ` *(+$${bonusCoinsApplied.toLocaleString('pt-BR')} bônus)*` : '';
+      const bonusXpStr = bonusXpApplied > 0 ? ` *(+${bonusXpApplied} XP bônus)*` : '';
 
       const text = `⚔️ *MISSÃO CUMPRIDA PELA GUILDA!* ⚔️\n\n` +
                    `📜 *Missão:* ${quest.title}\n` +
-                   `💰 *Recompensa:* +$${quest.rewardMoney.toLocaleString('pt-BR')} moedas\n` +
-                   `✨ *XP Adquirido:* +${quest.rewardXp} XP\n\n` +
+                   `💰 *Recompensa:* +$${finalCoins.toLocaleString('pt-BR')} moedas${bonusCoinsStr}\n` +
+                   `✨ *XP Adquirido:* +${finalXp} XP${bonusXpStr}\n\n` +
                    `📖 *Relato do Mestre da Guilda (IA):*\n_"${aiStory}"_`;
 
       return reply(text);
@@ -80,14 +125,29 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
 
     case 'raid':
     case 'chefe': {
+      const now = Date.now();
+      const RAID_COOLDOWN = 12 * 60 * 60 * 1000; // Limitador de 12 horas por jogador
+      const lastRaid = extraData.last_raid_time || 0;
+
+      if (now - lastRaid < RAID_COOLDOWN) {
+        const remaining = RAID_COOLDOWN - (now - lastRaid);
+        const hours = Math.floor(remaining / (1000 * 60 * 60));
+        const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+        return reply(`⏳ *REFORÇO DE RAID EM ESPERA!*\n\nSua energia para enfrentar grandes chefões está se recarregando.\n⏱️ *Tempo restante:* *${hours}h ${minutes}m*`);
+      }
+
+      if (userStats.isKnockedOut) {
+        return reply(`💀 *VOCÊ ESTÁ NOCAUTEADO (0/${userStats.maxHp} HP)!*\n\nVocê não pode atacar o chefe da Raid desacordado! Use \`/curar\` para recuperar suas forças.`);
+      }
+
       let raid = activeGroupRaids.get(from);
 
       if (!raid) {
         // Criar uma nova Raid no grupo
         const bosses = [
-          { name: '🐲 DRAGÃO ANCIÃO DO APOCALIPSE', hp: 1000, maxHp: 1000, rewardPool: 20000 },
-          { name: '👹 REI DOS GOBLINS SOMBRIOS', hp: 600, maxHp: 600, rewardPool: 10000 },
-          { name: 'COLOSSO DE PEDRA RUNICA', hp: 1500, maxHp: 1500, rewardPool: 35000 }
+          { name: '🐲 DRAGÃO ANCIÃO DO APOCALIPSE', hp: 1200, maxHp: 1200, rewardPool: 25000 },
+          { name: '👹 REI DOS GOBLINS SOMBRIOS', hp: 750, maxHp: 750, rewardPool: 14000 },
+          { name: '🗿 COLOSSO DE PEDRA RUNICA', hp: 1800, maxHp: 1800, rewardPool: 40000 }
         ];
         const boss = bosses[Math.floor(Math.random() * bosses.length)];
 
@@ -98,12 +158,26 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
         activeGroupRaids.set(from, raid);
       }
 
-      const userClass = RPG_CLASSES[extraData.rpg_class || 'guerreiro'];
-      const dmg = userClass.atk + Math.floor(Math.random() * 40) + 10;
-
+      // Dano do jogador
+      const dmg = userStats.totalAtk + Math.floor(Math.random() * 30) + 10;
       const currentDmg = raid.participants.get(sender) || 0;
       raid.participants.set(sender, currentDmg + dmg);
       raid.boss.hp -= dmg;
+
+      // Contra-ataque do chefe
+      const bossCounterAtk = Math.max(15, Math.floor(Math.random() * 45) + 20);
+      let newPlayerHp = Math.max(0, userStats.currentHp - bossCounterAtk);
+      let reviveText = '';
+
+      // Habilidade da Fênix Imortal (Auto-reviver 1x)
+      if (newPlayerHp <= 0 && userStats.petInfo && userStats.petInfo.id === 'fenix') {
+        newPlayerHp = userStats.maxHp;
+        reviveText = '\n🦅 *SUA FÊNIX IMORTAL RENASCEU VOCÊ DAS CINZAS!* (HP 100% restaurado!)';
+      }
+
+      extraData.current_hp = newPlayerHp;
+      extraData.last_raid_time = now;
+      updateUser(sender, { extra_data: JSON.stringify(extraData) });
 
       if (raid.boss.hp <= 0) {
         // Chefe Derrotado! Divisão do Tesouro entre todos os combatentes
@@ -113,11 +187,13 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
 
         for (const [pSender, pDamage] of raid.participants.entries()) {
           const shareRatio = pDamage / totalDamage;
-          const shareReward = Math.floor(raid.boss.rewardPool * shareRatio);
+          const rawReward = Math.floor(raid.boss.rewardPool * shareRatio);
           const pUser = getUser(pSender);
-          updateUser(pSender, { wallet: pUser.wallet + shareReward });
+          const { finalCoins, finalXp } = calculateBonusRewards(pUser, rawReward, 200, 'raid');
 
-          rewardReport += `• @${pSender.split('@')[0]} ➔ ${pDamage} de dano (+$${shareReward.toLocaleString('pt-BR')})\n`;
+          updateUser(pSender, { wallet: pUser.wallet + finalCoins, xp: pUser.xp + finalXp });
+
+          rewardReport += `• @${pSender.split('@')[0]} ➔ ${pDamage} dano (+$${finalCoins.toLocaleString('pt-BR')} moedas e +${finalXp} XP)\n`;
           mentions.push(pSender);
         }
 
@@ -137,14 +213,17 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
 
       const sys = 'Você é o narrador de um combate RPG em grupo. Escreva 1 frase ágil de 12 palavras sobre o ataque do jogador ao chefe. Sem aspas.';
       const prompt = `O jogador atacou o chefe ${raid.boss.name} causando ${dmg} de dano!`;
-      const aiStory = await getAiNarrative(prompt, sys) || 'Um golpe certeiro atingiu a armadura do monstro!';
+      const aiStory = await getAiNarrative(prompt, sys) || 'Um golpe certeiro atingiu o monstro!';
+
+      const koStatusText = newPlayerHp <= 0 ? '💀 *VOCÊ FOI NOCAUTEADO (K.O.)!* Use `/curar`' : `❤️ *Seu HP:* ${newPlayerHp}/${userStats.maxHp}`;
 
       const text = `⚔️ *BATALHA DE RAID EM GRUPO* ⚔️\n\n` +
                    `👾 *Chefe:* ${raid.boss.name}\n` +
-                   `❤️ *Vida do Chefe:* ${raid.boss.hp}/${raid.boss.maxHp} HP\n\n` +
-                   `💥 *Seu Ataque:* Você causou **${dmg}** de dano!\n\n` +
-                   `🎙️ *Narrador da Arena (IA):*\n_"${aiStory}"_\n\n` +
-                   `💡 _Outros membros do grupo podem usar /raid para atacar juntos!_`;
+                   `❤️ *Vida do Chefe:* ${Math.max(0, raid.boss.hp)}/${raid.boss.maxHp} HP\n\n` +
+                   `💥 *Seu Golpe:* +${dmg} de Dano!\n` +
+                   `🛡️ *Contra-ataque do Chefe:* -${bossCounterAtk} de HP recebido!\n` +
+                   `${koStatusText}${reviveText}\n\n` +
+                   `📖 *Narrativa da Rodada (IA):*\n_"${aiStory}"_`;
 
       return reply(text);
     }

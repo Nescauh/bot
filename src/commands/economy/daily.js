@@ -1,5 +1,6 @@
 import { getUser, updateUser } from '../../database/sqlite.js';
 import { askAi } from '../../utils/aiService.js';
+import { calculateBonusRewards } from '../../utils/bonusCalculator.js';
 
 const fallbackFortunes = [
   'Quem manda figurinha no grupo sempre encontra paz interior.',
@@ -35,8 +36,10 @@ export async function handleDailyCommand(sock, msg, sender) {
   // Bônus proporcional à sequência
   const baseReward = Math.floor(Math.random() * 400) + 600; // $600 a $1000
   const streakBonus = (streak - 1) * 150;
-  const totalReward = baseReward + streakBonus;
-  const earnedXp = 50 + (streak * 10);
+  const rawReward = baseReward + streakBonus;
+  const rawXp = 50 + (streak * 10);
+
+  const { finalCoins, finalXp, bonusCoinsApplied, bonusXpApplied } = calculateBonusRewards(user, rawReward, rawXp, 'daily');
 
   // Gerar conselho / Biscoito da sorte com IA
   let fortune = '';
@@ -51,8 +54,8 @@ export async function handleDailyCommand(sock, msg, sender) {
     fortune = fallbackFortunes[Math.floor(Math.random() * fallbackFortunes.length)];
   }
 
-  const newWallet = user.wallet + totalReward;
-  const newXp = user.xp + earnedXp;
+  const newWallet = user.wallet + finalCoins;
+  const newXp = user.xp + finalXp;
 
   updateUser(sender, {
     wallet: newWallet,
@@ -61,13 +64,15 @@ export async function handleDailyCommand(sock, msg, sender) {
     last_daily: now
   });
 
-  const streakBadge = streak > 1 ? `🔥 *Sequência Diária:* ${streak} dias (+$${streakBonus} bônus)` : `🔥 *Sequência Diária:* 1º dia (Mantenha o ritmo!)`;
+  const streakBadge = streak > 1 ? `🔥 *Sequência Diária:* ${streak} dias (+$${streakBonus} combo)` : `🔥 *Sequência Diária:* 1º dia (Mantenha o ritmo!)`;
+  const bonusCoinsStr = bonusCoinsApplied > 0 ? ` *(+$${bonusCoinsApplied.toLocaleString('pt-BR')} bônus)*` : '';
+  const bonusXpStr = bonusXpApplied > 0 ? ` *(+${bonusXpApplied} XP bônus)*` : '';
 
   const text = `🎁 *RECOMPENSA DIÁRIA RESGATADA!* 🎁\n\n` +
                `${streakBadge}\n` +
-               `💰 *Moedas Recebidas:* +$${totalReward}\n` +
-               `✨ *XP Bônus:* +${earnedXp} XP\n` +
-               `💵 *Novo Saldo:* *$${newWallet}*\n\n` +
+               `💰 *Moedas Recebidas:* +$${finalCoins.toLocaleString('pt-BR')}${bonusCoinsStr}\n` +
+               `✨ *XP Recebido:* +${finalXp} XP${bonusXpStr}\n` +
+               `💵 *Novo Saldo:* *$${newWallet.toLocaleString('pt-BR')}*\n\n` +
                `🥠 *Biscoito da Sorte da IA:*\n` +
                `_"${fortune}"_`;
 

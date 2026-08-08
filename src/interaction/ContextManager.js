@@ -96,7 +96,7 @@ export class ContextManager {
       if (match) {
         const fact = p.template(match);
         this.addUserFact(userJid, fact);
-        console.log(`🧠 [APRENDIZADO] SubaruBot aprendeu um fato sobre @${userJid.split('@')[0]}: "${fact}"`);
+        console.log(`🧠 [APRENDIZADO] QuintupletsBot aprendeu um fato sobre @${userJid.split('@')[0]}: "${fact}"`);
         break;
       }
     }

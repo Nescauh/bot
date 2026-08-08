@@ -1,14 +1,19 @@
 import { getUser, updateUser } from '../../database/sqlite.js';
+import { getAuraBuffs } from '../../utils/bonusCalculator.js';
 
 // Ranks de Aura baseados na quantidade acumulada
 export function getAuraRank(auraPoints) {
-  if (auraPoints >= 20000) return { title: '👑 Divino / Lendário', emoji: '👑', color: 'Divina' };
-  if (auraPoints >= 12000) return { title: '🌀 Aura Suprema', emoji: '🌀', color: 'Suprema' };
-  if (auraPoints >= 7000) return { title: '💎 Aura Celestial', emoji: '💎', color: 'Celestial' };
-  if (auraPoints >= 3500) return { title: '🔥 Aura Flamejante', emoji: '🔥', color: 'Flamejante' };
-  if (auraPoints >= 1500) return { title: '⚡ Aura Mística', emoji: '⚡', color: 'Mística' };
-  if (auraPoints >= 500) return { title: '🌟 Aura Iluminada', emoji: '🌟', color: 'Iluminada' };
-  return { title: '🌫️ Aura Comum', emoji: '🌫️', color: 'Comum' };
+  const buff = getAuraBuffs(auraPoints);
+  let emoji = '🌫️';
+  let color = 'Comum';
+  if (auraPoints >= 20000) { emoji = '👑'; color = 'Divina'; }
+  else if (auraPoints >= 12000) { emoji = '🌀'; color = 'Suprema'; }
+  else if (auraPoints >= 7000) { emoji = '💎'; color = 'Celestial'; }
+  else if (auraPoints >= 3500) { emoji = '🔥'; color = 'Flamejante'; }
+  else if (auraPoints >= 1500) { emoji = '⚡'; color = 'Mística'; }
+  else if (auraPoints >= 500) { emoji = '🌟'; color = 'Iluminada'; }
+
+  return { title: buff.title, emoji, color, buff };
 }
 
 const farmEvents = [
@@ -65,7 +70,8 @@ export async function handleFarmarAuraCommand(sock, msg, sender) {
   const responseText = `✨ *FARM DE AURA CONCLUÍDO!* ✨\n\n` +
                        `🧘 *Ação:* Você ${eventText} +*${earnedAura} de Aura*!${critTag}\n\n` +
                        `⚡ *Aura Total:* *${newAura.toLocaleString()} pts*\n` +
-                       `🛡️ *Status de Aura:* ${newRank.emoji} *${newRank.title}*${rankUpTag}\n\n` +
+                       `🛡️ *Status de Aura:* ${newRank.emoji} *${newRank.title}*${rankUpTag}\n` +
+                       `✨ *Buffs Ativos:* +${Math.round(newRank.buff.xpCoinBonus * 100)}% Moedas/XP | +${newRank.buff.bonusHp} HP | +${newRank.buff.bonusAtk} ATK\n\n` +
                        `⏱️ *Próximo farm disponível em:* 15 minutos.`;
 
   return sock.sendMessage(from, { text: responseText }, { quoted: msg });
@@ -109,6 +115,10 @@ export async function handleAuraCommand(sock, msg, args, sender, mentioned) {
                `👤 *Membro:* ${targetName}\n` +
                `⚡ *Aura Acumulada:* *${auraPoints.toLocaleString()} pts*\n` +
                `🏅 *Nível Espiritual:* ${rank.emoji} *${rank.title}*\n\n` +
+               `🔥 *BUFFS ATIVOS DE AURA:*\n` +
+               `• 💰/✨ *Bônus de Ganhos:* +${Math.round(rank.buff.xpCoinBonus * 100)}% em Moedas e XP\n` +
+               `• ❤️ *HP Bônus em Combate:* +${rank.buff.bonusHp} HP\n` +
+               `• ⚔️ *Ataque Espiritual:* +${rank.buff.bonusAtk} Dano ATK\n\n` +
                `🌾 *Farm de Aura:* ${farmStatus}\n\n` +
                `💡 _Dica: Use \`/farmar aura\` a cada 15 minutos para aumentar seu poder e subir de nível espiritual!_`;
 

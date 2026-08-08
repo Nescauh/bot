@@ -396,10 +396,14 @@ export async function handleSocialCommands(sock, msg, command, args, sender, men
       const winnerName = winner.split('@')[0];
       const loserName = loser.split('@')[0];
 
-      // Transferência de aura (30 pts)
-      const auraStolen = Math.min(30, getUser(loser).aura || 0);
+      // Transferência de aura em porcentagem (15% a 30% da aura do perdedor)
+      const loserObj = getUser(loser);
+      const loserAura = loserObj.aura || 0;
+      const pctStolen = Math.floor(Math.random() * 16) + 15; // 15% a 30%
+      const auraStolen = loserAura > 0 ? Math.max(15, Math.floor(loserAura * (pctStolen / 100))) : 0;
+
       updateUser(winner, { aura: (getUser(winner).aura || 0) + auraStolen });
-      updateUser(loser, { aura: Math.max(0, (getUser(loser).aura || 0) - auraStolen) });
+      updateUser(loser, { aura: Math.max(0, loserAura - auraStolen) });
 
       let aiMogStory = await getBrainrotAiStory(`Descreva como @${winnerName} MOGOU completamente @${loserName} e não sobrou nada pro betinha.`);
       if (!aiMogStory) {
@@ -409,7 +413,7 @@ export async function handleSocialCommands(sock, msg, command, args, sender, men
       return reply(
         `🗿 *DUELO DE MOGGING (67)* 🗿\n\n` +
         `👑 *Vencedor:* @${winnerName} MOGOU @${loserName}!\n` +
-        `⚡ *Roubo de Aura:* +${auraStolen} pts de Aura transferidos!\n\n` +
+        `⚡ *Roubo de Aura:* *${pctStolen}%* (+$${auraStolen.toLocaleString()} pts de Aura transferidos!)\n\n` +
         `🗣️ *Relatório do Mogging:* ${aiMogStory}`,
         [winner, loser]
       );

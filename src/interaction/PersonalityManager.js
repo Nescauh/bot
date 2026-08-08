@@ -1,6 +1,6 @@
 /**
  * PersonalityManager.js
- * Define e gerencia a personalidade do Subaru Bot.
+ * Define e gerencia a personalidade do Quintuplets Bot.
  */
 
 export class PersonalityManager {
@@ -9,10 +9,10 @@ export class PersonalityManager {
    * @param {string} groupName Nome do grupo (se houver)
    * @param {string} userName Nome do usuário interagindo
    * @param {Array<string>} userFacts Fatos conhecidos sobre o usuário
-   * @param {string} botName Nome do Bot (padrão: Subaru Bot)
+   * @param {string} botName Nome do Bot (padrão: Quintuplets Bot)
    * @returns {string} Instrução de sistema completa
    */
-  static getSystemInstruction(groupName = 'Grupo', userName = 'Amigo', userFacts = [], botName = 'Subaru Bot') {
+  static getSystemInstruction(groupName = 'Grupo', userName = 'Amigo', userFacts = [], botName = 'Quintuplets Bot') {
     const factsFormatted = userFacts.length > 0
       ? userFacts.map(f => `- ${f}`).join('\n')
       : 'Nenhum fato registrado ainda.';

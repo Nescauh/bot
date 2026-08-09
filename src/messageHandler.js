@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import { jidNormalizedUser } from '@whiskeysockets/baileys';
 import { handleSocialCommands } from './commands/social.js';
 import { handleAdminCommands } from './commands/admin.js';
 import { handleMediaCommands } from './commands/media.js';
@@ -119,13 +120,15 @@ function cacheMessage(from, msg) {
 }
 
 export async function handleMessages(rawSock, msg) {
-  const from = msg.key.remoteJid;
-  if (!from) return;
+  const rawFrom = msg.key?.remoteJid;
+  if (!rawFrom) return;
+
+  const isGroup = rawFrom.endsWith('@g.us');
+  const from = isGroup ? rawFrom : jidNormalizedUser(rawFrom);
+  const rawSender = isGroup ? (msg.key.participant || rawFrom) : (msg.key.participant || rawFrom);
+  const sender = jidNormalizedUser(rawSender);
 
   const sock = queueManager.wrapSocket(rawSock);
-
-  const isGroup = from.endsWith('@g.us');
-  const sender = msg.key.participant || msg.key.remoteJid;
 
   // 1. Processar Anti-Delete Legado
   const protocolMsg = msg.message?.protocolMessage;
@@ -191,12 +194,18 @@ export async function handleMessages(rawSock, msg) {
 
   cacheMessage(from, msg);
 
-  // Extrair texto da mensagem (suporte total a mensagens temporárias/PV, viewOnce e legendas de mídia)
+  // Extrair texto da mensagem desempacotando todos os wrappers do Baileys (deviceSent, ephemeral, etc.)
   let messageObj = msg.message;
-  if (messageObj?.ephemeralMessage?.message) messageObj = messageObj.ephemeralMessage.message;
-  if (messageObj?.viewOnceMessage?.message) messageObj = messageObj.viewOnceMessage.message;
-  if (messageObj?.viewOnceMessageV2?.message) messageObj = messageObj.viewOnceMessageV2.message;
-  if (messageObj?.documentWithCaptionMessage?.message) messageObj = messageObj.documentWithCaptionMessage.message;
+  while (messageObj) {
+    if (messageObj.ephemeralMessage?.message) messageObj = messageObj.ephemeralMessage.message;
+    else if (messageObj.viewOnceMessage?.message) messageObj = messageObj.viewOnceMessage.message;
+    else if (messageObj.viewOnceMessageV2?.message) messageObj = messageObj.viewOnceMessageV2.message;
+    else if (messageObj.viewOnceMessageV2Extension?.message) messageObj = messageObj.viewOnceMessageV2Extension.message;
+    else if (messageObj.documentWithCaptionMessage?.message) messageObj = messageObj.documentWithCaptionMessage.message;
+    else if (messageObj.deviceSentMessage?.message) messageObj = messageObj.deviceSentMessage.message;
+    else if (messageObj.editedMessage?.message?.protocolMessage?.editedMessage) messageObj = messageObj.editedMessage.message.protocolMessage.editedMessage;
+    else break;
+  }
 
   let body = '';
   if (messageObj?.conversation) {
@@ -217,9 +226,12 @@ export async function handleMessages(rawSock, msg) {
     body = messageObj.templateButtonReplyMessage.selectedId;
   }
 
-  // Permitir que o usuário no privado digite "menu" ou "help" mesmo sem a barra "/"
-  if (!isGroup && body && ['menu', 'help', 'ajuda'].includes(body.toLowerCase().trim())) {
-    body = prefix + 'menu';
+  // Permitir comandos populares no privado mesmo se digitados sem a barra "/"
+  if (!isGroup && body && !body.startsWith(prefix)) {
+    const firstWord = body.toLowerCase().trim().split(/\s+/)[0];
+    if (['menu', 'help', 'ajuda', 'loja', 'perfil', 'rank', 'level', 'saldo', 'reino', 'reinos', 'guerra', 'pets', 'pet'].includes(firstWord)) {
+      body = prefix + body.trim();
+    }
   }
 
   // Ignorar mensagens enviadas pelo próprio bot, a menos que sejam comandos iniciados pelo prefixo

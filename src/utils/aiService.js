@@ -12,11 +12,9 @@ export async function askAi(prompt, systemInstruction = 'Você é uma inteligên
   // 1. Suporte a Google Gemini API (chaves iniciadas por AQ. ou AIza)
   if (apiKey.startsWith('AQ.') || apiKey.startsWith('AIza')) {
     const geminiModels = [
-      'gemini-3.6-flash',
-      'gemini-3.5-flash-lite',
-      'gemini-flash-latest',
-      'gemini-flash-lite-latest',
-      'gemini-2.0-flash'
+      'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-pro'
     ];
     for (const model of geminiModels) {
       try {

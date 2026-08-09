@@ -1,6 +1,6 @@
 import path from 'path';
 import fs from 'fs';
-import { jidNormalizedUser } from '@whiskeysockets/baileys';
+import { jidNormalizedUser, USyncQuery, USyncUser } from '@whiskeysockets/baileys';
 import { handleSocialCommands } from './commands/social.js';
 import { handleAdminCommands } from './commands/admin.js';
 import { handleMediaCommands } from './commands/media.js';
@@ -147,7 +147,31 @@ export async function handleMessages(rawSock, msg) {
     if (foundReal) {
       from = foundReal;
       sender = foundReal;
-    } else {
+    } else if (rawFrom.endsWith('@lid') && rawSock.executeUSyncQuery) {
+      try {
+        const usync = new USyncQuery()
+          .withContactProtocol()
+          .withUser(new USyncUser().withId(rawFrom));
+        const res = await rawSock.executeUSyncQuery(usync);
+        if (res?.list && res.list.length > 0) {
+          const item = res.list[0];
+          if (item?.id && (item.id.endsWith('@s.whatsapp.net') || item.id.endsWith('@c.us'))) {
+            from = jidNormalizedUser(item.id);
+            sender = from;
+          } else if (item?.phone) {
+            const cleanPhone = String(item.phone).replace(/[^0-9]/g, '');
+            if (cleanPhone) {
+              from = `${cleanPhone}@s.whatsapp.net`;
+              sender = from;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ Falha ao resolver LID via USync:', err.message);
+      }
+    }
+
+    if (!from || from.endsWith('@lid')) {
       from = jidNormalizedUser(rawFrom);
       sender = jidNormalizedUser(sender);
     }

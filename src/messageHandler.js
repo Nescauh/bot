@@ -121,12 +121,39 @@ function cacheMessage(from, msg) {
 
 export async function handleMessages(rawSock, msg) {
   const rawFrom = msg.key?.remoteJid;
-  if (!rawFrom) return;
+  if (!rawFrom || rawFrom === 'status@broadcast') return;
 
   const isGroup = rawFrom.endsWith('@g.us');
-  const from = isGroup ? rawFrom : jidNormalizedUser(rawFrom);
-  const rawSender = isGroup ? (msg.key.participant || rawFrom) : (msg.key.participant || rawFrom);
-  const sender = jidNormalizedUser(rawSender);
+  let from = rawFrom;
+  let sender = isGroup ? (msg.key.participant || rawFrom) : rawFrom;
+
+  // Extrair JID de telefone real para WhatsApp Business / PV (@s.whatsapp.net ou @c.us)
+  if (!isGroup) {
+    const candidates = [
+      rawFrom,
+      msg.key?.participant,
+      msg.key?.remoteJidAlt,
+      msg.key?.participantAlt,
+      msg.message?.extendedTextMessage?.contextInfo?.participant,
+      msg.message?.extendedTextMessage?.contextInfo?.remoteJid
+    ];
+    let foundReal = null;
+    for (const cand of candidates) {
+      if (cand && typeof cand === 'string' && (cand.endsWith('@s.whatsapp.net') || cand.endsWith('@c.us'))) {
+        foundReal = jidNormalizedUser(cand);
+        break;
+      }
+    }
+    if (foundReal) {
+      from = foundReal;
+      sender = foundReal;
+    } else {
+      from = jidNormalizedUser(rawFrom);
+      sender = jidNormalizedUser(sender);
+    }
+  } else {
+    sender = jidNormalizedUser(sender);
+  }
 
   const sock = queueManager.wrapSocket(rawSock);
 
@@ -194,7 +221,7 @@ export async function handleMessages(rawSock, msg) {
 
   cacheMessage(from, msg);
 
-  // Extrair texto da mensagem desempacotando todos os wrappers do Baileys (deviceSent, ephemeral, etc.)
+  // Extrair texto da mensagem desempacotando todos os wrappers do Baileys e WhatsApp Business
   let messageObj = msg.message;
   while (messageObj) {
     if (messageObj.ephemeralMessage?.message) messageObj = messageObj.ephemeralMessage.message;
@@ -203,6 +230,8 @@ export async function handleMessages(rawSock, msg) {
     else if (messageObj.viewOnceMessageV2Extension?.message) messageObj = messageObj.viewOnceMessageV2Extension.message;
     else if (messageObj.documentWithCaptionMessage?.message) messageObj = messageObj.documentWithCaptionMessage.message;
     else if (messageObj.deviceSentMessage?.message) messageObj = messageObj.deviceSentMessage.message;
+    else if (messageObj.businessMessage?.message) messageObj = messageObj.businessMessage.message;
+    else if (messageObj.botInvokeMessage?.message) messageObj = messageObj.botInvokeMessage.message;
     else if (messageObj.editedMessage?.message?.protocolMessage?.editedMessage) messageObj = messageObj.editedMessage.message.protocolMessage.editedMessage;
     else break;
   }
@@ -224,6 +253,17 @@ export async function handleMessages(rawSock, msg) {
     body = messageObj.listResponseMessage.singleSelectReply.selectedRowId;
   } else if (messageObj?.templateButtonReplyMessage?.selectedId) {
     body = messageObj.templateButtonReplyMessage.selectedId;
+  } else if (messageObj?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson) {
+    try {
+      const params = JSON.parse(messageObj.interactiveResponseMessage.nativeFlowResponseMessage.paramsJson);
+      body = params.id || params.reference_id || '';
+    } catch (_) {}
+  } else if (messageObj?.interactiveMessage?.body?.text) {
+    body = messageObj.interactiveMessage.body.text;
+  }
+
+  if (!isGroup) {
+    console.log(`📩 [PV RECEBIDO] De: ${sender} | Texto: "${body}"`);
   }
 
   // Permitir comandos populares no privado mesmo se digitados sem a barra "/"

@@ -30,12 +30,15 @@ async function startBot() {
     console.warn('⚠️ Não foi possível buscar a versão mais recente do WA Web, usando padrão interno do Baileys.', err);
   }
 
-  // Inicializa o socket do Baileys
+  // Inicializa o socket do Baileys (otimizado para contas pessoais e WhatsApp Business)
   const sock = makeWASocket({
     version,
     auth: state,
-    logger: pino({ level: 'silent' }), // Mantém o console limpo de logs de debug internos
-    browser: ['Ubuntu', 'Chrome', '20.0.04'] // Browser padrão otimizado para Baileys
+    logger: pino({ level: 'silent' }),
+    browser: ['Mac OS', 'Chrome', '10.15.7'], // Perfil de navegador compativel com WA Business
+    markOnlineOnConnect: true,
+    syncFullHistory: false,
+    generateHighQualityLinkPreview: true
   });
 
   // Suporte a Código de Pareamento (login por número de celular em vez de QR Code)

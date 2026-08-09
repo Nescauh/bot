@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import fs from 'fs';
 import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
@@ -95,7 +96,16 @@ async function startBot() {
         // Tenta reconectar após 3 segundos
         setTimeout(() => startBot(), 3000);
       } else {
-        console.log('❌ O bot foi desconectado pelo celular (desconectado do dispositivo). Escaneie o QR Code novamente para conectar.');
+        console.log('❌ A sessão antiga foi deslogada pelo WhatsApp. Limpando credenciais antigas para novo login...');
+        try {
+          if (fs.existsSync('session')) {
+            fs.rmSync('session', { recursive: true, force: true });
+          }
+          fs.mkdirSync('session', { recursive: true });
+        } catch (e) {
+          console.error('Erro ao limpar pasta session:', e.message);
+        }
+        setTimeout(() => startBot(), 3000);
       }
     } else if (connection === 'open') {
       console.log('\n╔════════════════════════════════════════╗');

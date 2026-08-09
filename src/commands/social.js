@@ -73,11 +73,41 @@ export async function handleSocialCommands(sock, msg, command, args, sender, men
         return reply('⚠️ O pedido expirou pois a pessoa já se casou com outro.');
       }
 
+      const senderUser = getUser(sender);
+      const noivoUser = getUser(noivo);
+
+      let senderExtra = {};
+      let noivoExtra = {};
+      try {
+        senderExtra = typeof senderUser.extra_data === 'string' ? JSON.parse(senderUser.extra_data || '{}') : (senderUser.extra_data || {});
+        noivoExtra = typeof noivoUser.extra_data === 'string' ? JSON.parse(noivoUser.extra_data || '{}') : (noivoUser.extra_data || {});
+      } catch (_) {}
+
+      const senderRoyal = (senderExtra.houses || []).some(h => ['vila', 'reinopequeno', 'imperio'].includes(h));
+      const noivoRoyal = (noivoExtra.houses || []).some(h => ['vila', 'reinopequeno', 'imperio'].includes(h));
+      const isRoyalMarriage = senderRoyal || noivoRoyal;
+
+      if (isRoyalMarriage) {
+        senderExtra.kingdom_alliance = noivo;
+        noivoExtra.kingdom_alliance = sender;
+        updateUser(sender, { extra_data: JSON.stringify(senderExtra) });
+        updateUser(noivo, { extra_data: JSON.stringify(noivoExtra) });
+      }
+
       updateDatabase((d) => {
-        d.casamentos[sender] = { parceiro: noivo, since: Date.now() };
-        d.casamentos[noivo] = { parceiro: sender, since: Date.now() };
+        d.casamentos[sender] = { parceiro: noivo, since: Date.now(), isRoyal: isRoyalMarriage };
+        d.casamentos[noivo] = { parceiro: sender, since: Date.now(), isRoyal: isRoyalMarriage };
         delete d.pedidosCasamento[sender];
       });
+
+      if (isRoyalMarriage) {
+        return reply(`👑 *CASAMENTO REAL & ALIANÇA MATRIMONIAL DE TERRENOS!* 🏰\n\n` +
+                     `🎉 Os soberanos @${sender.split('@')[0]} e @${noivo.split('@')[0]} uniram seus impérios e coroas no Matrimônio Real!\n\n` +
+                     `✨ *BENEFÍCIOS DA DINASTIA UNIDA:*\n` +
+                     `• 👑 Título Real: *Rei & Rainha / Imperadores da Dinastia*\n` +
+                     `• 💰 +50% Bônus em aluguéis e impostos de terrenos no /daily!\n` +
+                     `• 🤝 Pacto Diplomático Automático e Defesa Conjunta nas Guerras de Reinos!`, [sender, noivo]);
+      }
 
       return reply(`💍 Parabéns! @${sender.split('@')[0]} e @${noivo.split('@')[0]} agora estão casados! 🎉\nQue essa união seja repleta de felicidade!`, [sender, noivo]);
     }

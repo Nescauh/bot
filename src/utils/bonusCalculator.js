@@ -47,7 +47,11 @@ export function getClassData(className = 'guerreiro', userLevel = 1) {
 
 // 2. Buffs por Nível de Aura
 export function getAuraBuffs(auraPoints = 0) {
-  if (auraPoints >= 20000) return { title: '👑 Divino / Lendário', xpCoinBonus: 0.45, bonusHp: 500, bonusAtk: 120 };
+  if (auraPoints >= 120000) return { title: '🛐 Aura Omnipotente', xpCoinBonus: 1.30, bonusHp: 2200, bonusAtk: 550 };
+  if (auraPoints >= 85000) return { title: '💥 Aura Transcendente', xpCoinBonus: 1.00, bonusHp: 1600, bonusAtk: 380 };
+  if (auraPoints >= 55000) return { title: '♾️ Aura Primordial', xpCoinBonus: 0.80, bonusHp: 1100, bonusAtk: 260 };
+  if (auraPoints >= 35000) return { title: '🌌 Aura Cósmica', xpCoinBonus: 0.60, bonusHp: 750, bonusAtk: 180 };
+  if (auraPoints >= 20000) return { title: '👑 Aura Divina', xpCoinBonus: 0.45, bonusHp: 500, bonusAtk: 120 };
   if (auraPoints >= 12000) return { title: '🌀 Aura Suprema', xpCoinBonus: 0.30, bonusHp: 300, bonusAtk: 75 };
   if (auraPoints >= 7000) return { title: '💎 Aura Celestial', xpCoinBonus: 0.20, bonusHp: 180, bonusAtk: 45 };
   if (auraPoints >= 3500) return { title: '🔥 Aura Flamejante', xpCoinBonus: 0.15, bonusHp: 100, bonusAtk: 25 };
@@ -68,7 +72,7 @@ export const EXTENDED_PETS = {
 
 export function getPetData(petKey) {
   if (!petKey) return null;
-  const key = typeof petKey === 'string' ? petKey.toLowerCase() : petKey.id;
+  const key = typeof petKey === 'string' ? petKey.toLowerCase() : petKey.type || petKey.id;
   return EXTENDED_PETS[key] || null;
 }
 
@@ -90,7 +94,8 @@ export function calculateBonusRewards(user, baseCoins = 0, baseXp = 0, contextTy
   const classInfo = getClassData(rpgClassKey, userLevel);
   const auraBuff = getAuraBuffs(user.aura || 0);
   const petInfo = getPetData(extraData.pet);
-  const prestige = Number(extraData.prestige || 0);
+  const petLevel = Number(extraData.pet?.level || 1);
+  const prestige = Number(user.prestige || extraData.prestige || 0);
 
   let coinMultiplier = 1.0;
   let xpMultiplier = 1.0;
@@ -103,14 +108,19 @@ export function calculateBonusRewards(user, baseCoins = 0, baseXp = 0, contextTy
   coinMultiplier += auraBuff.xpCoinBonus;
   xpMultiplier += auraBuff.xpCoinBonus;
 
-  // Prestígio (+10%/lvl)
+  // Prestígio / Ascensão (+15%/nível de ascensão)
   if (prestige > 0) {
-    coinMultiplier += prestige * 0.10;
-    xpMultiplier += prestige * 0.10;
+    coinMultiplier += prestige * 0.15;
+    xpMultiplier += prestige * 0.15;
   }
 
   // Pet Buffs
   if (petInfo) {
+    // Bônus de nível do pet (+5% moedas/XP por nível de pet)
+    const petLvlBonus = (petLevel - 1) * 0.05;
+    coinMultiplier += petLvlBonus;
+    xpMultiplier += petLvlBonus;
+
     if (petInfo.id === 'gato') xpMultiplier += 0.15;
     if (petInfo.id === 'papagaio' && ['chat', 'daily'].includes(contextType)) xpMultiplier += 0.20;
     if (petInfo.id === 'raposa' && contextType === 'steal') coinMultiplier += 0.30;
@@ -166,22 +176,28 @@ export function getUserStats(user) {
   const classInfo = getClassData(extraData.rpg_class || 'guerreiro', userLevel);
   const auraBuff = getAuraBuffs(user.aura || 0);
   const petInfo = getPetData(extraData.pet);
+  const petLevel = Number(extraData.pet?.level || 1);
+  const prestige = Number(user.prestige || extraData.prestige || 0);
 
   const equippedWeapon = extraData.equipped_weapon || { name: 'Mãos Nua', atk: 0 };
   const equippedArmor = extraData.equipped_armor || { name: 'Roupas Comuns', hp: 0 };
 
-  let petHp = 0;
-  let petAtk = 0;
+  let petHp = (petLevel - 1) * 15;
+  let petAtk = (petLevel - 1) * 8;
   if (petInfo && petInfo.id === 'dragao') {
-    petHp = 200;
-    petAtk = 50;
+    petHp += 200;
+    petAtk += 50;
   }
   if (petInfo && petInfo.id === 'fenix') {
-    petHp = 100;
+    petHp += 100;
   }
 
-  const maxHp = classInfo.hp + (equippedArmor.hp || 0) + auraBuff.bonusHp + petHp;
-  const totalAtk = classInfo.atk + (equippedWeapon.atk || 0) + auraBuff.bonusAtk + petAtk;
+  // Bônus de Ascensão / Prestígio (+50 HP e +20 ATK por Nível de Prestígio)
+  const prestigeHp = prestige * 50;
+  const prestigeAtk = prestige * 20;
+
+  const maxHp = classInfo.hp + (equippedArmor.hp || 0) + auraBuff.bonusHp + petHp + prestigeHp;
+  const totalAtk = classInfo.atk + (equippedWeapon.atk || 0) + auraBuff.bonusAtk + petAtk + prestigeAtk;
   
   let currentHp = extraData.current_hp;
   if (currentHp === undefined || currentHp === null) {
@@ -199,6 +215,7 @@ export function getUserStats(user) {
     maxHp,
     currentHp,
     totalAtk,
+    prestige,
     isKnockedOut: currentHp <= 0
   };
 }

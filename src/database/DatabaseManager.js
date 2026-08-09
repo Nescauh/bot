@@ -896,6 +896,12 @@ class DatabaseManager {
       }
     }
 
+    // Auto-cálculo e sincronização universal de nível ao modificar XP
+    if (updates.xp !== undefined && updates.level === undefined) {
+      const calculatedLevel = Math.floor(Math.sqrt(Number(user.xp || 0) / 50)) + 1;
+      user.level = Math.max(Number(user.level || 1), calculatedLevel);
+    }
+
     await this.persistUser(user);
   }
 

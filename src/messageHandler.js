@@ -71,6 +71,7 @@ import { handleOwnerEconomyCommands, activeResetConfirmations } from './commands
 
 import { handleAiExtraCommands } from './commands/ai_extra.js';
 import { handleBankMarketCommands } from './commands/bank_market.js';
+import { handleKingdomCommands } from './commands/kingdom_system.js';
 import { handleMinigamesCommands } from './commands/minigames.js';
 import { handleRpgSystemCommands } from './commands/rpg_system.js';
 import { handleGroupReputationCommands } from './commands/group_reputation.js';
@@ -588,6 +589,10 @@ export async function handleMessages(rawSock, msg) {
     else if (['depositar', 'sacar', 'imoveis', 'casas', 'pet', 'pets'].includes(command)) {
       await handleBankMarketCommands(sock, msg, command, args, sender);
     }
+    // 👑 Sistema de Monarquia, Reinos, Guerras & Alianças
+    else if (['reino', 'reinos', 'guerra', 'guerras', 'lojareino', 'reinoloja', 'alianca', 'aliança'].includes(command)) {
+      await handleKingdomCommands(sock, msg, command, args, sender);
+    }
     // 🎰 Minigames & Cassino com IA
     else if (['blackjack', '21', 'poker', 'cacaniquel', 'slots', 'pescar', 'pesca', 'roubar'].includes(command)) {
       await handleMinigamesCommands(sock, msg, command, args, sender, mentioned);
@@ -613,7 +618,7 @@ export async function handleMessages(rawSock, msg) {
       await handleVoiceSystemCommands(sock, msg, command, args, sender);
     }
     // ⭐ Perfil & Prestígio
-    else if (['prestigio', 'prestige', 'conquistas', 'medalhas', 'avatar'].includes(command)) {
+    else if (['prestigio', 'prestige', 'ascensao', 'ascensão', 'conquistas', 'medalhas', 'avatar'].includes(command)) {
       await handleProfilePrestigeCommands(sock, msg, command, args, sender);
     }
     // 🔥 Eventos Sazonais

@@ -190,6 +190,20 @@ export async function handleMinigamesCommands(sock, msg, command, args, sender, 
       }
 
       const targetUser = getUser(target);
+      let targetExtra = {};
+      try {
+        targetExtra = typeof targetUser.extra_data === 'string' ? JSON.parse(targetUser.extra_data || '{}') : (targetUser.extra_data || {});
+      } catch (_) {}
+
+      const now = Date.now();
+      if (targetExtra.shield_until && now < targetExtra.shield_until) {
+        const remainingMs = targetExtra.shield_until - now;
+        const hours = Math.floor(remainingMs / (1000 * 60 * 60));
+        const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+        const timeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+        return reply(`🛡️ *ROUBO IMPEDIDO POR ESCUDO!* 🛡️\n\n@${target.split('@')[0]} ativou o **Escudo Anti-Roubo** místico!\n⏱️ *Tempo restante do escudo:* ${timeStr}\n\n💡 _Ninguém pode roubá-lo enquanto o escudo estiver ativo._`, [target]);
+      }
+
       if (targetUser.wallet < 200) {
         return reply(`⚠️ @${target.split('@')[0]} é muito pobre e não tem nem $200 na carteira!`, [target]);
       }

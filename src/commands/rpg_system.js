@@ -126,15 +126,8 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
     case 'raid':
     case 'chefe': {
       const now = Date.now();
-      const RAID_COOLDOWN = 12 * 60 * 60 * 1000; // Limitador de 12 horas por jogador
-      const lastRaid = extraData.last_raid_time || 0;
-
-      if (now - lastRaid < RAID_COOLDOWN) {
-        const remaining = RAID_COOLDOWN - (now - lastRaid);
-        const hours = Math.floor(remaining / (1000 * 60 * 60));
-        const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-        return reply(`⏳ *REFORÇO DE RAID EM ESPERA!*\n\nSua energia para enfrentar grandes chefões está se recarregando.\n⏱️ *Tempo restante:* *${hours}h ${minutes}m*`);
-      }
+      const RAID_SESSION_COOLDOWN = 12 * 60 * 60 * 1000; // 12 horas entre Raids
+      const TURN_COOLDOWN = 30 * 1000; // 30 segundos entre golpes na mesma Raid
 
       if (userStats.isKnockedOut) {
         return reply(`💀 *VOCÊ ESTÁ NOCAUTEADO (0/${userStats.maxHp} HP)!*\n\nVocê não pode atacar o chefe da Raid desacordado! Use \`/curar\` para recuperar suas forças.`);
@@ -142,30 +135,48 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
 
       let raid = activeGroupRaids.get(from);
 
+      // Se não há Raid ativa no grupo, verifica o tempo para iniciar uma nova Raid inteira
       if (!raid) {
-        // Criar uma nova Raid no grupo
+        const lastRaidSession = extraData.last_raid_session_time || 0;
+        if (now - lastRaidSession < RAID_SESSION_COOLDOWN) {
+          const remaining = RAID_SESSION_COOLDOWN - (now - lastRaidSession);
+          const hours = Math.floor(remaining / (1000 * 60 * 60));
+          const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+          return reply(`⏳ *PRÓXIMA RAID EM PREPARAÇÃO!* 🏰\n\nA guilda está mapeando a localização do próximo monstro supremo.\n⏱️ *Tempo para a próxima Raid inteira:* *${hours}h ${minutes}m*`);
+        }
+
+        // Criar uma nova Raid inteira de grupo!
         const bosses = [
-          { name: '🐲 DRAGÃO ANCIÃO DO APOCALIPSE', hp: 1200, maxHp: 1200, rewardPool: 25000 },
-          { name: '👹 REI DOS GOBLINS SOMBRIOS', hp: 750, maxHp: 750, rewardPool: 14000 },
-          { name: '🗿 COLOSSO DE PEDRA RUNICA', hp: 1800, maxHp: 1800, rewardPool: 40000 }
+          { name: '🐲 DRAGÃO ANCIÃO DO APOCALIPSE', hp: 3000, maxHp: 3000, rewardPool: 75000 },
+          { name: '👹 REI DOS GOBLINS SOMBRIOS', hp: 2000, maxHp: 2000, rewardPool: 45000 },
+          { name: '🗿 COLOSSO DE PEDRA RÚNICA', hp: 4500, maxHp: 4500, rewardPool: 120000 },
+          { name: '⚡ LORDE DOS TIÇÕES INFERNAIS', hp: 6000, maxHp: 6000, rewardPool: 180000 }
         ];
         const boss = bosses[Math.floor(Math.random() * bosses.length)];
 
         raid = {
           boss,
+          startTime: now,
           participants: new Map() // sender -> damage
         };
         activeGroupRaids.set(from, raid);
       }
 
+      // Verificação do turno de ataque (30s) na Raid inteira em andamento
+      const lastAttack = extraData.last_raid_attack_time || 0;
+      if (now - lastAttack < TURN_COOLDOWN) {
+        const remainingSec = Math.ceil((TURN_COOLDOWN - (now - lastAttack)) / 1000);
+        return reply(`⏳ *RECUPERANDO FÔLEGO!*\n\nAguarde *${remainingSec}s* para desferir o seu próximo golpe contra o chefe da Raid!`);
+      }
+
       // Dano do jogador
-      const dmg = userStats.totalAtk + Math.floor(Math.random() * 30) + 10;
+      const dmg = userStats.totalAtk + Math.floor(Math.random() * 40) + 15;
       const currentDmg = raid.participants.get(sender) || 0;
       raid.participants.set(sender, currentDmg + dmg);
       raid.boss.hp -= dmg;
 
       // Contra-ataque do chefe
-      const bossCounterAtk = Math.max(15, Math.floor(Math.random() * 45) + 20);
+      const bossCounterAtk = Math.max(20, Math.floor(Math.random() * 50) + 25);
       let newPlayerHp = Math.max(0, userStats.currentHp - bossCounterAtk);
       let reviveText = '';
 
@@ -176,11 +187,12 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
       }
 
       extraData.current_hp = newPlayerHp;
-      extraData.last_raid_time = now;
+      extraData.last_raid_attack_time = now;
+      extraData.last_raid_session_time = raid.startTime;
       updateUser(sender, { extra_data: JSON.stringify(extraData) });
 
       if (raid.boss.hp <= 0) {
-        // Chefe Derrotado! Divisão do Tesouro entre todos os combatentes
+        // Chefe Derrotado! Divisão do Tesouro entre todos os participantes da Raid
         const totalDamage = Array.from(raid.participants.values()).reduce((a, b) => a + b, 0);
         let rewardReport = '';
         const mentions = [];
@@ -189,7 +201,7 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
           const shareRatio = pDamage / totalDamage;
           const rawReward = Math.floor(raid.boss.rewardPool * shareRatio);
           const pUser = getUser(pSender);
-          const { finalCoins, finalXp } = calculateBonusRewards(pUser, rawReward, 200, 'raid');
+          const { finalCoins, finalXp } = calculateBonusRewards(pUser, rawReward, 500, 'raid');
 
           updateUser(pSender, { wallet: pUser.wallet + finalCoins, xp: pUser.xp + finalXp });
 
@@ -203,10 +215,11 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
         const prompt = `O chefe ${raid.boss.name} foi derrotado pela união do grupo de aventureiros!`;
         const aiStory = await getAiNarrative(prompt, sys) || 'Com um rugido estrondoso, o monstro lendário caiu derrotado!';
 
-        const text = `🏆 *CHEFE DERROTADO PELO GRUPO!* 🏆\n\n` +
-                     `👾 *Monstro:* ${raid.boss.name}\n\n` +
+        const text = `🏆 *RAID CONCLUÍDA — CHEFE DERROTADO!* 🏆\n\n` +
+                     `👾 *Monstro Lendário:* ${raid.boss.name}\n\n` +
                      `📜 *Crônica da Batalha (IA):*\n_"${aiStory}"_\n\n` +
-                     `💰 *DIVISÃO DO TESOURO:*\n${rewardReport}`;
+                     `💰 *DIVISÃO DO TESOURO DA RAID:*\n${rewardReport}\n` +
+                     `⏱️ *Próxima Raid do grupo disponível em:* 12 horas!`;
 
         return reply(text, mentions);
       }
@@ -217,13 +230,14 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
 
       const koStatusText = newPlayerHp <= 0 ? '💀 *VOCÊ FOI NOCAUTEADO (K.O.)!* Use `/curar`' : `❤️ *Seu HP:* ${newPlayerHp}/${userStats.maxHp}`;
 
-      const text = `⚔️ *BATALHA DE RAID EM GRUPO* ⚔️\n\n` +
+      const text = `⚔️ *BATALHA DE RAID EM GRUPO (SESSÃO ATIVA)* ⚔️\n\n` +
                    `👾 *Chefe:* ${raid.boss.name}\n` +
-                   `❤️ *Vida do Chefe:* ${Math.max(0, raid.boss.hp)}/${raid.boss.maxHp} HP\n\n` +
+                   `❤️ *Vida Restante:* ${Math.max(0, raid.boss.hp)}/${raid.boss.maxHp} HP\n\n` +
                    `💥 *Seu Golpe:* +${dmg} de Dano!\n` +
                    `🛡️ *Contra-ataque do Chefe:* -${bossCounterAtk} de HP recebido!\n` +
                    `${koStatusText}${reviveText}\n\n` +
-                   `📖 *Narrativa da Rodada (IA):*\n_"${aiStory}"_`;
+                   `📖 *Narrativa da Rodada (IA):*\n_"${aiStory}"_\n\n` +
+                   `💡 _Continue atacando a cada 30 segundos com \`/raid\` junto com seu grupo até derrotá-lo!_`;
 
       return reply(text);
     }

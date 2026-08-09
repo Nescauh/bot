@@ -1,6 +1,7 @@
 import { getUser, updateUser } from '../../database/sqlite.js';
 import { askAi } from '../../utils/aiService.js';
 import { calculateBonusRewards } from '../../utils/bonusCalculator.js';
+import { HOUSES } from '../bank_market.js';
 
 const fallbackFortunes = [
   'Quem manda figurinha no grupo sempre encontra paz interior.',
@@ -54,7 +55,26 @@ export async function handleDailyCommand(sock, msg, sender) {
     fortune = fallbackFortunes[Math.floor(Math.random() * fallbackFortunes.length)];
   }
 
-  const newWallet = user.wallet + finalCoins;
+  // Bônus de Aluguel de Imóveis & Reinos
+  let extraData = {};
+  try {
+    extraData = typeof user.extra_data === 'string' ? JSON.parse(user.extra_data || '{}') : (user.extra_data || {});
+  } catch (_) {}
+
+  let houseRentIncome = 0;
+  if (extraData.houses && Array.isArray(extraData.houses)) {
+    for (const hKey of extraData.houses) {
+      if (HOUSES[hKey]) houseRentIncome += HOUSES[hKey].dailyBonus;
+    }
+  }
+
+  // Bônus de Suprimentos do Reino (+20% por nível)
+  const suppliesLvl = Number(extraData.kingdom_upgrades?.supplies || 1);
+  if (suppliesLvl > 1 && houseRentIncome > 0) {
+    houseRentIncome = Math.round(houseRentIncome * (1 + (suppliesLvl - 1) * 0.20));
+  }
+
+  const newWallet = user.wallet + finalCoins + houseRentIncome;
   const newXp = user.xp + finalXp;
 
   updateUser(sender, {

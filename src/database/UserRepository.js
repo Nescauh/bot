@@ -46,8 +46,8 @@ class UserRepository {
     const currentXP = Number(user.xp || 0);
     const newXP = currentXP + Number(amount || 0);
     
-    // Cálculo simples de nível baseado em XP
-    const newLevel = Math.floor(Math.sqrt(newXP / 100)) + 1;
+    // Cálculo padronizado de nível baseado em XP
+    const newLevel = Math.floor(Math.sqrt(newXP / 50)) + 1;
 
     await this.updateUser(jid, {
       xp: newXP,

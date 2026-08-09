@@ -13,13 +13,15 @@ export async function handleProfilePrestigeCommands(sock, msg, command, args, se
   } catch (_) {}
 
   switch (command) {
+    case 'ascensao':
+    case 'ascensão':
     case 'prestigio':
     case 'prestige': {
       if (user.level < 100) {
-        return reply(`⚠️ *SISTEMA DE PRESTÍGIO* ⚠️\n\n` +
-                     `Você precisa alcançar o **Nível 100** para habilitar o Prestígio!\n` +
+        return reply(`⚠️ *SISTEMA DE ASCENSÃO / PRESTÍGIO* ⚠️\n\n` +
+                     `Você precisa alcançar o **Nível 100** para realizar a Ascensão Espiritual!\n` +
                      `🌟 *Seu Nível Atual:* ${user.level}/100\n\n` +
-                     `💡 _Continue enviando mensagens e realizando trabalhos para evoluir seu nível!_`);
+                     `💡 _Continue enviando mensagens e realizando tarefas para evoluir seu nível!_`);
       }
 
       const currentPrestige = extraData.prestige || 0;
@@ -36,10 +38,13 @@ export async function handleProfilePrestigeCommands(sock, msg, command, args, se
       const romanNumerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
       const prestigeSymbol = romanNumerals[newPrestige - 1] || newPrestige;
 
-      return reply(`🌌 *PRESTÍGIO ALCANÇADO — DIVINDADE SUPREMA!* 🌌\n\n` +
-                   `🎉 Parabéns @${sender.split('@')[0]}! Você transcendeu o nível máximo 100 e conquistou:\n\n` +
-                   `⭐ *PRESTÍGIO ${prestigeSymbol}*\n\n` +
-                   `✨ Seu nível voltou ao Nível 1, mas agora você possui bônus permanentes de +${newPrestige * 10}% em todas as moedas e XP ganhos!`, [sender]);
+      return reply(`🌌 *ASCENSÃO CONQUISTADA — PODER DIVINO!* 🌌\n\n` +
+                   `🎉 Parabéns @${sender.split('@')[0]}! Você transcendeu o nível 100 e atingiu:\n\n` +
+                   `⭐ *PRESTÍGIO / ASCENSÃO ${prestigeSymbol}*\n\n` +
+                   `✨ *BUFFS PERMANENTES ATIVADOS:*\n` +
+                   `• 💰/✨ *Ganhos:* +${newPrestige * 15}% em Moedas e XP\n` +
+                   `• ❤️ *Atributo Vital:* +${newPrestige * 50} HP Máximo em Combates/Raids\n` +
+                   `• ⚔️ *Força Mística:* +${newPrestige * 20} ATK Bônus Permanente!`, [sender]);
     }
 
     case 'conquistas':

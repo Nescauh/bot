@@ -49,8 +49,22 @@ export async function handleComprarCommand(sock, msg, args, sender) {
     } else if (item.effect === 'aura') {
       newAura += item.value;
       effectMsg = `\n💎 *BÔNUS APLICADO:* +${item.value.toLocaleString()} pts de Aura adicionados!`;
+    } else if (item.effect === 'shield') {
+      extraData.shield_until = Date.now() + (2 * 60 * 60 * 1000);
+      effectMsg = `\n🛡️ *ESCUDO ANTI-ROUBO ATIVADO:* Você está 100% protegido contra assaltos (/roubar) pelas próximas 2 horas!`;
+    } else if (item.effect === 'pet_candy') {
+      if (extraData.pet) {
+        extraData.pet.level = Number(extraData.pet.level || 1) + 1;
+        effectMsg = `\n🍬 *RARE CANDY ALIMENTADO:* Seu pet **${extraData.pet.name}** evoluiu para o *Nível ${extraData.pet.level}*! 🐾⚡`;
+      } else {
+        effectMsg = `\n🍬 *RARE CANDY GUARDADO:* Guardado no seu /inventario! Adote um pet com \`/pet\` para alimentá-lo com este doce.`;
+      }
     }
   }
+
+  // Recálculo do Nível do Jogador
+  const calculatedLevel = Math.floor(Math.sqrt(newXp / 50)) + 1;
+  const finalLevel = Math.max(Number(user.level || 1), calculatedLevel);
 
   // Equipamentos RPG (Equipam automaticamente)
   if (item.category === 'weapon') {
@@ -64,6 +78,7 @@ export async function handleComprarCommand(sock, msg, args, sender) {
   updateUser(sender, {
     wallet: newWallet,
     xp: newXp,
+    level: finalLevel,
     aura: newAura,
     inventory: JSON.stringify(inventory),
     extra_data: JSON.stringify(extraData)

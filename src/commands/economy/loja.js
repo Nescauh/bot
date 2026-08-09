@@ -9,7 +9,9 @@ export const shopItems = [
   { id: 8, name: '💍 Anel de Diamante Puro', price: 5000, desc: 'Anel luxuoso de 24k perfeito para o comando /casar' },
   { id: 9, name: '🏎️ Lamborghini de Plástico', price: 12000, desc: 'Máxima ostentação para exibir na garagem do bot' },
   { id: 10, name: '🏰 Mansão no Metaverso', price: 30000, desc: 'Residência oficial de altíssimo padrão' },
-  { id: 11, name: '👑 Coroa de Ouro Imperial', price: 100000, desc: 'Relíquia lendária para os verdadeiros reis da economia' }
+  { id: 11, name: '👑 Coroa de Ouro Imperial', price: 100000, desc: 'Relíquia lendária para os verdadeiros reis da economia' },
+  { id: 12, name: '🛡️ Escudo Anti-Roubo', price: 5000, type: 'consumable', effect: 'shield', desc: 'Escudo místico que protege o jogador contra qualquer assalto (/roubar) durante 2 horas' },
+  { id: 13, name: '🍬 Rare Candy', price: 2500, type: 'consumable', effect: 'pet_candy', desc: 'Doce lendário alimentado ao seu pet (/pet evoluir) para aumentar o nível dele em +1' }
 ];
 
 export const rpgShopItems = [

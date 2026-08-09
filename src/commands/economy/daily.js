@@ -1,6 +1,6 @@
 import { getUser, updateUser } from '../../database/sqlite.js';
 import { askAi } from '../../utils/aiService.js';
-import { calculateBonusRewards } from '../../utils/bonusCalculator.js';
+import { calculateBonusRewards, checkAndApplyLevelUp } from '../../utils/bonusCalculator.js';
 import { HOUSES } from '../bank_market.js';
 
 const fallbackFortunes = [
@@ -75,11 +75,12 @@ export async function handleDailyCommand(sock, msg, sender) {
   }
 
   const newWallet = user.wallet + finalCoins + houseRentIncome;
-  const newXp = user.xp + finalXp;
+  const { newXp, newLevel, levelUpMsg } = checkAndApplyLevelUp(user, finalXp);
 
   updateUser(sender, {
     wallet: newWallet,
     xp: newXp,
+    level: newLevel,
     daily_streak: streak,
     last_daily: now
   });
@@ -87,12 +88,13 @@ export async function handleDailyCommand(sock, msg, sender) {
   const streakBadge = streak > 1 ? `🔥 *Sequência Diária:* ${streak} dias (+$${streakBonus} combo)` : `🔥 *Sequência Diária:* 1º dia (Mantenha o ritmo!)`;
   const bonusCoinsStr = bonusCoinsApplied > 0 ? ` *(+$${bonusCoinsApplied.toLocaleString('pt-BR')} bônus)*` : '';
   const bonusXpStr = bonusXpApplied > 0 ? ` *(+${bonusXpApplied} XP bônus)*` : '';
+  const rentStr = houseRentIncome > 0 ? `\n🏰 *Rendimento de Imóveis & Reino:* +$${houseRentIncome.toLocaleString('pt-BR')}` : '';
 
   const text = `🎁 *RECOMPENSA DIÁRIA RESGATADA!* 🎁\n\n` +
                `${streakBadge}\n` +
-               `💰 *Moedas Recebidas:* +$${finalCoins.toLocaleString('pt-BR')}${bonusCoinsStr}\n` +
+               `💰 *Moedas Recebidas:* +$${finalCoins.toLocaleString('pt-BR')}${bonusCoinsStr}${rentStr}\n` +
                `✨ *XP Recebido:* +${finalXp} XP${bonusXpStr}\n` +
-               `💵 *Novo Saldo:* *$${newWallet.toLocaleString('pt-BR')}*\n\n` +
+               `💵 *Novo Saldo:* *$${newWallet.toLocaleString('pt-BR')}*${levelUpMsg}\n\n` +
                `🥠 *Biscoito da Sorte da IA:*\n` +
                `_"${fortune}"_`;
 

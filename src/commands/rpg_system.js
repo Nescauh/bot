@@ -1,6 +1,6 @@
 import { getUser, updateUser } from '../database/sqlite.js';
 import { askAi } from '../utils/aiService.js';
-import { calculateBonusRewards, getUserStats } from '../utils/bonusCalculator.js';
+import { calculateBonusRewards, getUserStats, checkAndApplyLevelUp } from '../utils/bonusCalculator.js';
 
 export const RPG_CLASSES = {
   guerreiro: { name: '⚔️ Guerreiro de Aço', hp: 200, atk: 35, bonusMsg: 'Mais força (+25% moedas em combate, roubo, raid e missões)!' },
@@ -8,8 +8,9 @@ export const RPG_CLASSES = {
   arqueiro: { name: '🏹 Arqueiro Elfo', hp: 150, atk: 45, bonusMsg: 'Mais agilidade (+25% moedas em pesca e minijogos)!' }
 };
 
-// Armazena o Chefe Ativo por chat (Group Raid)
+// Armazena o Chefe Ativo e Última Raid concluída por chat (Group Raid)
 export const activeGroupRaids = new Map();
+export const lastGroupRaidSessions = new Map();
 
 async function getAiNarrative(prompt, sysInstruction) {
   try {
@@ -104,8 +105,8 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
       const { finalCoins, finalXp, bonusCoinsApplied, bonusXpApplied } = calculateBonusRewards(user, quest.rewardMoney, quest.rewardXp, 'quest');
 
       const newWallet = user.wallet + finalCoins;
-      const newXp = user.xp + finalXp;
-      updateUser(sender, { wallet: newWallet, xp: newXp });
+      const { newXp, newLevel, levelUpMsg } = checkAndApplyLevelUp(user, finalXp);
+      updateUser(sender, { wallet: newWallet, xp: newXp, level: newLevel });
 
       const sys = 'Você é um Mestre de Guilda RPG épico em um jogo de aventura medieval. Escreva 1 relato dinâmico de 20 palavras sobre o cumprimento da missão. Sem aspas.';
       const prompt = `O guerreiro completou a missão "${quest.title}" usando suas habilidades.`;
@@ -117,7 +118,7 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
       const text = `⚔️ *MISSÃO CUMPRIDA PELA GUILDA!* ⚔️\n\n` +
                    `📜 *Missão:* ${quest.title}\n` +
                    `💰 *Recompensa:* +$${finalCoins.toLocaleString('pt-BR')} moedas${bonusCoinsStr}\n` +
-                   `✨ *XP Adquirido:* +${finalXp} XP${bonusXpStr}\n\n` +
+                   `✨ *XP Adquirido:* +${finalXp} XP${bonusXpStr}${levelUpMsg}\n\n` +
                    `📖 *Relato do Mestre da Guilda (IA):*\n_"${aiStory}"_`;
 
       return reply(text);
@@ -126,7 +127,7 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
     case 'raid':
     case 'chefe': {
       const now = Date.now();
-      const RAID_SESSION_COOLDOWN = 12 * 60 * 60 * 1000; // 12 horas entre Raids
+      const RAID_SESSION_COOLDOWN = 12 * 60 * 60 * 1000; // 12 horas entre Raids do grupo
       const TURN_COOLDOWN = 30 * 1000; // 30 segundos entre golpes na mesma Raid
 
       if (userStats.isKnockedOut) {
@@ -135,14 +136,14 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
 
       let raid = activeGroupRaids.get(from);
 
-      // Se não há Raid ativa no grupo, verifica o tempo para iniciar uma nova Raid inteira
+      // Se não há Raid ativa no grupo, verifica o tempo de grupo para iniciar uma nova Raid inteira
       if (!raid) {
-        const lastRaidSession = extraData.last_raid_session_time || 0;
-        if (now - lastRaidSession < RAID_SESSION_COOLDOWN) {
-          const remaining = RAID_SESSION_COOLDOWN - (now - lastRaidSession);
+        const lastGroupRaid = lastGroupRaidSessions.get(from) || 0;
+        if (now - lastGroupRaid < RAID_SESSION_COOLDOWN) {
+          const remaining = RAID_SESSION_COOLDOWN - (now - lastGroupRaid);
           const hours = Math.floor(remaining / (1000 * 60 * 60));
           const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-          return reply(`⏳ *PRÓXIMA RAID EM PREPARAÇÃO!* 🏰\n\nA guilda está mapeando a localização do próximo monstro supremo.\n⏱️ *Tempo para a próxima Raid inteira:* *${hours}h ${minutes}m*`);
+          return reply(`⏳ *PRÓXIMA RAID EM PREPARAÇÃO!* 🏰\n\nA guilda está mapeando a localização do próximo monstro supremo para o grupo.\n⏱️ *Tempo para a próxima Raid inteira do grupo:* *${hours}h ${minutes}m*`);
         }
 
         // Criar uma nova Raid inteira de grupo!
@@ -202,14 +203,16 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
           const rawReward = Math.floor(raid.boss.rewardPool * shareRatio);
           const pUser = getUser(pSender);
           const { finalCoins, finalXp } = calculateBonusRewards(pUser, rawReward, 500, 'raid');
+          const { newXp, newLevel, levelUpMsg } = checkAndApplyLevelUp(pUser, finalXp);
 
-          updateUser(pSender, { wallet: pUser.wallet + finalCoins, xp: pUser.xp + finalXp });
+          updateUser(pSender, { wallet: pUser.wallet + finalCoins, xp: newXp, level: newLevel });
 
-          rewardReport += `• @${pSender.split('@')[0]} ➔ ${pDamage} dano (+$${finalCoins.toLocaleString('pt-BR')} moedas e +${finalXp} XP)\n`;
+          rewardReport += `• @${pSender.split('@')[0]} ➔ ${pDamage} dano (+$${finalCoins.toLocaleString('pt-BR')} moedas e +${finalXp} XP)${levelUpMsg}\n`;
           mentions.push(pSender);
         }
 
         activeGroupRaids.delete(from);
+        lastGroupRaidSessions.set(from, now);
 
         const sys = 'Você é um narrador épico de batalhas de chefe em jogos MMORPG. Escreva 1 parágrafo vibrante de 20 palavras sobre o golpe final derrotando o monstro lendário. Sem aspas.';
         const prompt = `O chefe ${raid.boss.name} foi derrotado pela união do grupo de aventureiros!`;

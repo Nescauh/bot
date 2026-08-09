@@ -6,7 +6,11 @@ export function getAuraRank(auraPoints) {
   const buff = getAuraBuffs(auraPoints);
   let emoji = '🌫️';
   let color = 'Comum';
-  if (auraPoints >= 120000) { emoji = '🛐'; color = 'Omnipotente'; }
+  if (auraPoints >= 1000000) { emoji = '👑'; color = 'Divina Cósmica Suprema'; }
+  else if (auraPoints >= 500000) { emoji = '🐲'; color = 'Dracônica Absoluta'; }
+  else if (auraPoints >= 350000) { emoji = '🌌'; color = 'Multiversal'; }
+  else if (auraPoints >= 200000) { emoji = '🌟'; color = 'Astral Imortal'; }
+  else if (auraPoints >= 120000) { emoji = '🛐'; color = 'Omnipotente'; }
   else if (auraPoints >= 85000) { emoji = '💥'; color = 'Transcendente'; }
   else if (auraPoints >= 55000) { emoji = '♾️'; color = 'Primordial'; }
   else if (auraPoints >= 35000) { emoji = '🌌'; color = 'Cósmica'; }

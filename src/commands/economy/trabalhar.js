@@ -1,6 +1,6 @@
 import { getUser, updateUser } from '../../database/sqlite.js';
 import { askAi } from '../../utils/aiService.js';
-import { calculateBonusRewards } from '../../utils/bonusCalculator.js';
+import { calculateBonusRewards, checkAndApplyLevelUp } from '../../utils/bonusCalculator.js';
 
 const fallbackJobs = [
   'desenvolveu um bot secreto para o WhatsApp de uma grande empresa',
@@ -43,15 +43,7 @@ export async function handleTrabalharCommand(sock, msg, sender) {
   }
 
   const newWallet = user.wallet + finalCoins;
-  const newXp = user.xp + finalXp;
-  const nextLevelXp = Math.pow(user.level, 2) * 50;
-  let newLevel = user.level;
-  let levelUpMsg = '';
-
-  if (newXp >= nextLevelXp) {
-    newLevel += 1;
-    levelUpMsg = `\n🎉 *LEVEL UP!* Você subiu para o *Nível ${newLevel}*! 🏆`;
-  }
+  const { newXp, newLevel, levelUpMsg } = checkAndApplyLevelUp(user, finalXp);
 
   updateUser(sender, {
     wallet: newWallet,

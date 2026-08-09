@@ -1,6 +1,6 @@
 import { getUser, updateUser } from '../database/sqlite.js';
 import { askAi } from '../utils/aiService.js';
-import { calculateBonusRewards } from '../utils/bonusCalculator.js';
+import { calculateBonusRewards, checkAndApplyLevelUp } from '../utils/bonusCalculator.js';
 
 async function getAiCommentary(prompt, sysInstruction) {
   try {
@@ -163,8 +163,8 @@ export async function handleMinigamesCommands(sock, msg, command, args, sender, 
       const { finalCoins, finalXp, bonusCoinsApplied, bonusXpApplied } = calculateBonusRewards(user, item.val, 15, 'fishing');
 
       const newWallet = user.wallet + finalCoins;
-      const newXp = user.xp + finalXp;
-      updateUser(sender, { wallet: newWallet, xp: newXp });
+      const { newXp, newLevel, levelUpMsg } = checkAndApplyLevelUp(user, finalXp);
+      updateUser(sender, { wallet: newWallet, xp: newXp, level: newLevel });
 
       const sys = 'Você é um velho pescador lendário e contador de histórias à beira do rio. Escreva 1 frase pitoresca de 15 palavras sobre o momento da fisgada. Sem aspas.';
       const prompt = `O pescador jogou a linha e fisgou um(a): ${item.name} valendo ${item.val} moedas.`;
@@ -177,7 +177,7 @@ export async function handleMinigamesCommands(sock, msg, command, args, sender, 
                    `🌊 Você jogou o anzol no lago e fisgou:\n` +
                    `👉 **${item.name}**!\n` +
                    `💰 *Valor de Venda:* +$${finalCoins.toLocaleString('pt-BR')} moedas${bonusCoinsStr}\n` +
-                   `✨ *XP da Pesca:* +${finalXp} XP${bonusXpStr}\n\n` +
+                   `✨ *XP da Pesca:* +${finalXp} XP${bonusXpStr}${levelUpMsg}\n\n` +
                    `📜 *Relato do Velho Pescador (IA):*\n_"${aiStory}"_`;
 
       return reply(text);
@@ -216,9 +216,10 @@ export async function handleMinigamesCommands(sock, msg, command, args, sender, 
       if (success) {
         const rawStolen = Math.floor(targetUser.wallet * (Math.random() * 0.3 + 0.1)); // 10% a 40% da carteira
         const { finalCoins, finalXp, bonusCoinsApplied } = calculateBonusRewards(user, rawStolen, 25, 'steal');
+        const { newXp, newLevel, levelUpMsg } = checkAndApplyLevelUp(user, finalXp);
 
         updateUser(target, { wallet: Math.max(0, targetUser.wallet - rawStolen) });
-        updateUser(sender, { wallet: user.wallet + finalCoins, xp: user.xp + finalXp });
+        updateUser(sender, { wallet: user.wallet + finalCoins, xp: newXp, level: newLevel });
 
         const sys = 'Você é um narrador de filmes de assalto à banco e ação policial. Escreva 1 relato engraçado e ágil de 18 palavras sobre um roubo bem sucedido. Sem aspas.';
         const prompt = `O assaltante @${sender.split('@')[0]} roubou $${finalCoins} da carteira de @${target.split('@')[0]} e escapou num carro rápido.`;

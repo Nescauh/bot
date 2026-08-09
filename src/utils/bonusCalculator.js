@@ -47,6 +47,10 @@ export function getClassData(className = 'guerreiro', userLevel = 1) {
 
 // 2. Buffs por Nível de Aura
 export function getAuraBuffs(auraPoints = 0) {
+  if (auraPoints >= 1000000) return { title: '👑 Aura Divina Cósmica Suprema', xpCoinBonus: 5.00, bonusHp: 12000, bonusAtk: 3000 };
+  if (auraPoints >= 500000) return { title: '🐲 Aura Dracônica Absoluta', xpCoinBonus: 3.00, bonusHp: 6000, bonusAtk: 1500 };
+  if (auraPoints >= 350000) return { title: '🌌 Aura Multiversal', xpCoinBonus: 2.20, bonusHp: 4200, bonusAtk: 1050 };
+  if (auraPoints >= 200000) return { title: '🌟 Aura Astral Imortal', xpCoinBonus: 1.70, bonusHp: 3000, bonusAtk: 750 };
   if (auraPoints >= 120000) return { title: '🛐 Aura Omnipotente', xpCoinBonus: 1.30, bonusHp: 2200, bonusAtk: 550 };
   if (auraPoints >= 85000) return { title: '💥 Aura Transcendente', xpCoinBonus: 1.00, bonusHp: 1600, bonusAtk: 380 };
   if (auraPoints >= 55000) return { title: '♾️ Aura Primordial', xpCoinBonus: 0.80, bonusHp: 1100, bonusAtk: 260 };
@@ -58,6 +62,25 @@ export function getAuraBuffs(auraPoints = 0) {
   if (auraPoints >= 1500) return { title: '⚡ Aura Mística', xpCoinBonus: 0.10, bonusHp: 50, bonusAtk: 10 };
   if (auraPoints >= 500) return { title: '🌟 Aura Iluminada', xpCoinBonus: 0.05, bonusHp: 20, bonusAtk: 0 };
   return { title: '🌫️ Aura Comum', xpCoinBonus: 0, bonusHp: 0, bonusAtk: 0 };
+}
+
+// Cálculo Unificado de Nível e Verificação de Level Up
+export function calculateLevelFromXp(xp = 0) {
+  return Math.floor(Math.sqrt(Math.max(0, Number(xp || 0)) / 50)) + 1;
+}
+
+export function checkAndApplyLevelUp(user, addedXp = 0) {
+  const currentXp = Number(user?.xp || 0) + Number(addedXp || 0);
+  const currentLevel = Number(user?.level || 1);
+  const newLevel = calculateLevelFromXp(currentXp);
+  const finalLevel = Math.max(currentLevel, newLevel);
+  const leveledUp = finalLevel > currentLevel;
+  return {
+    newXp: currentXp,
+    newLevel: finalLevel,
+    leveledUp,
+    levelUpMsg: leveledUp ? `\n🎉 *LEVEL UP!* Você evoluiu para o *Nível ${finalLevel}*! 🏆` : ''
+  };
 }
 
 // 3. Pets e Habilidades Passivas

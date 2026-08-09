@@ -190,12 +190,13 @@ class QueueManager {
 
   // --- RETRY DE MENSAGENS BAILEYS ---
   async sendWithRetry(sock, jid, content, options, customDelays = [2000, 4000, 8000]) {
+    const rawSock = sock._rawSock || sock;
     const delays = customDelays;
     let attempt = 0;
 
     while (attempt <= delays.length) {
       try {
-        const result = await sock.sendMessage(jid, content, options);
+        const result = await rawSock.sendMessage(jid, content, options);
         return result;
       } catch (err) {
         attempt++;
@@ -234,12 +235,14 @@ class QueueManager {
 
     const self = this;
     const wrapped = Object.create(sock);
+    const rawSock = sock._rawSock || sock;
 
     wrapped.sendMessage = function (jid, content, options = {}) {
-      return self.sendMessage(sock, jid, content, options);
+      return self.sendMessage(rawSock, jid, content, options);
     };
 
     wrapped._isQueueWrapped = true;
+    wrapped._rawSock = rawSock;
     return wrapped;
   }
 

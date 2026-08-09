@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import fs from 'fs';
-import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import QRCode from 'qrcode';
@@ -8,6 +8,8 @@ import { loadDatabase } from './src/database.js';
 import { initSqlite } from './src/database/sqlite.js';
 import { handleMessages } from './src/messageHandler.js';
 
+// Cache global de tentativas de retry para evitar loops de mensagens não descriptografadas
+const msgRetryCounterCache = new Map();
 
 // Marca o horário de início do bot
 global.botStartTime = Date.now();
@@ -16,6 +18,8 @@ async function startBot() {
   // Carrega banco de dados local centralizado
   await loadDatabase();
   await initSqlite();
+
+  const logger = pino({ level: 'silent' });
 
   // Define diretório de sessão para salvar as credenciais de autenticação
   const { state, saveCreds } = await useMultiFileAuthState('session');
@@ -30,15 +34,22 @@ async function startBot() {
     console.warn('⚠️ Não foi possível buscar a versão mais recente do WA Web, usando padrão interno do Baileys.', err);
   }
 
-  // Inicializa o socket do Baileys (otimizado para contas pessoais e WhatsApp Business)
+  // Inicializa o socket do Baileys com cache de chaves Signal e tratamento de retries
   const sock = makeWASocket({
     version,
-    auth: state,
-    logger: pino({ level: 'silent' }),
+    auth: {
+      creds: state.creds,
+      keys: makeCacheableSignalKeyStore(state.keys, logger)
+    },
+    logger,
     browser: ['Mac OS', 'Chrome', '10.15.7'], // Perfil de navegador compativel com WA Business
     markOnlineOnConnect: true,
     syncFullHistory: false,
-    generateHighQualityLinkPreview: true
+    generateHighQualityLinkPreview: true,
+    msgRetryCounterCache,
+    getMessage: async (key) => {
+      return { conversation: 'Bot WhatsApp' };
+    }
   });
 
   // Suporte a Código de Pareamento (login por número de celular em vez de QR Code)

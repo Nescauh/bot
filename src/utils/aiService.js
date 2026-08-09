@@ -9,43 +9,6 @@ export async function askAi(prompt, systemInstruction = 'Você é uma inteligên
   const envKey = process.env.AI_API_KEY;
   const apiKey = (envKey && envKey.trim()) ? envKey.trim() : FALLBACK_GROQ_KEY;
 
-  // 1. Suporte a Google Gemini API (chaves iniciadas por AQ. ou AIza)
-  if (apiKey.startsWith('AQ.') || apiKey.startsWith('AIza')) {
-    const geminiModels = [
-      'gemini-2.0-flash',
-      'gemini-1.5-flash',
-      'gemini-pro'
-    ];
-    for (const model of geminiModels) {
-      try {
-        const res = await axios.post(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-          {
-            contents: [
-              {
-                role: 'user',
-                parts: [{ text: `${systemInstruction}\n\n${prompt}` }]
-              }
-            ]
-          },
-          {
-            headers: {
-              'x-goog-api-key': apiKey,
-              'Content-Type': 'application/json'
-            },
-            timeout: 15000
-          }
-        );
-
-        const content = res.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (content && content.trim()) {
-          return content.trim();
-        }
-      } catch (err) {
-        console.warn(`⚠️ Gemini API modelo ${model} falhou (${err.response?.data?.error?.message || err.message}). Tentando próximo modelo...`);
-      }
-    }
-  }
 
   // 2. Prioridade Máxima: Groq API (Inferência ultrarrápida com LLaMA 3.3 70B)
   if (apiKey.startsWith('gsk_')) {

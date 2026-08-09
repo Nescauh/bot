@@ -501,13 +501,27 @@ export async function handleMessages(rawSock, msg) {
 
         if (videoFiles.length > 0) {
           const randomVideoPath = videoFiles[Math.floor(Math.random() * videoFiles.length)];
-          return sock.sendMessage(from, {
-            video: fs.readFileSync(randomVideoPath),
-            caption: menuText,
-            gifPlayback: true
-          }, { quoted: msg });
+          try {
+            return await sock.sendMessage(from, {
+              video: fs.readFileSync(randomVideoPath),
+              caption: menuText,
+              gifPlayback: true,
+              mimetype: 'video/mp4'
+            }, { quoted: msg });
+          } catch (vidErr) {
+            console.warn('⚠️ Falha ao enviar vídeo no menu, enviando como texto:', vidErr.message);
+            try {
+              return await sock.sendMessage(from, { text: menuText }, { quoted: msg });
+            } catch (_) {
+              return await sock.sendMessage(from, { text: menuText });
+            }
+          }
         } else {
-          return sock.sendMessage(from, { text: menuText }, { quoted: msg });
+          try {
+            return await sock.sendMessage(from, { text: menuText }, { quoted: msg });
+          } catch (_) {
+            return await sock.sendMessage(from, { text: menuText });
+          }
         }
     }
     // 👑 Administração da Economia (Dono)
@@ -638,6 +652,10 @@ export async function handleMessages(rawSock, msg) {
 
   } catch (error) {
     console.error(`Erro ao executar o comando /${command}:`, error);
-    await sock.sendMessage(from, { text: `⚠️ Ocorreu um erro interno ao processar o comando /${command}.` }, { quoted: msg });
+    try {
+      await sock.sendMessage(from, { text: `⚠️ Ocorreu um erro interno ao processar o comando /${command}.` }, { quoted: msg });
+    } catch (_) {
+      await sock.sendMessage(from, { text: `⚠️ Ocorreu um erro interno ao processar o comando /${command}.` }).catch(() => {});
+    }
   }
 }

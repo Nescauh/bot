@@ -117,9 +117,9 @@ async function startBot() {
     }
   });
 
-  // Escuta novas mensagens recebidas
+  // Escuta novas mensagens recebidas (suporte a mensagens de notificação e append no PV)
   sock.ev.on('messages.upsert', async (m) => {
-    if (m.type === 'notify') {
+    if (m.type === 'notify' || m.type === 'append') {
       for (const msg of m.messages) {
         try {
           await handleMessages(sock, msg);

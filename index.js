@@ -7,6 +7,9 @@ import QRCode from 'qrcode';
 import { loadDatabase } from './src/database.js';
 import { initSqlite } from './src/database/sqlite.js';
 import { handleMessages } from './src/messageHandler.js';
+import queueManager from './src/queue/QueueManager.js';
+
+import { startBirthdayChecker } from './src/utils/birthdayChecker.js';
 
 // Cache global de tentativas de retry para evitar loops de mensagens não descriptografadas
 const msgRetryCounterCache = new Map();
@@ -35,7 +38,7 @@ async function startBot() {
   }
 
   // Inicializa o socket do Baileys com cache de chaves Signal e tratamento de retries
-  const sock = makeWASocket({
+  const rawSock = makeWASocket({
     version,
     auth: {
       creds: state.creds,
@@ -51,6 +54,8 @@ async function startBot() {
       return { conversation: 'Bot WhatsApp' };
     }
   });
+
+  const sock = queueManager.wrapSocket(rawSock);
 
   // Suporte a Código de Pareamento (login por número de celular em vez de QR Code)
   const botNumber = process.env.BOT_NUMERO || process.env.PAIRING_NUMBER;
@@ -128,6 +133,7 @@ async function startBot() {
       console.log('║ Digite os comandos no WhatsApp para    ║');
       console.log('║ interagir com o bot.                   ║');
       console.log('╚════════════════════════════════════════╝\n');
+      startBirthdayChecker(sock);
     }
   });
 

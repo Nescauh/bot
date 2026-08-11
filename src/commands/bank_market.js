@@ -1,5 +1,6 @@
-import { getUser, updateUser } from '../database/sqlite.js';
+import { getUser, updateUser, addBalance, deductBalance } from '../database/sqlite.js';
 import { EXTENDED_PETS } from '../utils/bonusCalculator.js';
+import { sanitizeMoney, validateEconomicValue } from '../utils/economicValidation.js';
 
 export const HOUSES = {
   casa: { name: '🏠 Casa de Bairro', price: 15000, dailyBonus: 1000, title: null },
@@ -37,20 +38,21 @@ export async function handleBankMarketCommands(sock, msg, command, args, sender)
       if (valStr === 'tudo' || valStr === 'all') {
         amount = user.wallet;
       } else {
-        amount = parseInt(valStr, 10);
+        amount = sanitizeMoney(valStr);
       }
 
-      if (isNaN(amount) || amount <= 0) {
+      if (!validateEconomicValue(valStr === 'tudo' || valStr === 'all' ? amount : valStr) || amount <= 0) {
         return reply('⚠️ Digite um valor numérico válido maior que zero.');
       }
 
-      if (user.wallet < amount) {
+      const deducted = await deductBalance(sender, amount);
+      if (!deducted) {
         return reply(`⚠️ Você não tem **$${amount.toLocaleString('pt-BR')}** na sua carteira. Saldo atual: **$${user.wallet.toLocaleString('pt-BR')}**.`);
       }
 
-      const newWallet = user.wallet - amount;
       const newBank = user.bank + amount;
-      updateUser(sender, { wallet: newWallet, bank: newBank });
+      await updateUser(sender, { bank: newBank });
+      const updatedUser = getUser(sender);
 
       return reply(`🏦 *DEPÓSITO BANCÁRIO REALIZADO!*\n\n` +
                    `💸 *Depositado:* $${amount.toLocaleString('pt-BR')}\n` +
@@ -69,10 +71,10 @@ export async function handleBankMarketCommands(sock, msg, command, args, sender)
       if (valStr === 'tudo' || valStr === 'all') {
         amount = user.bank;
       } else {
-        amount = parseInt(valStr, 10);
+        amount = sanitizeMoney(valStr);
       }
 
-      if (isNaN(amount) || amount <= 0) {
+      if (!validateEconomicValue(valStr === 'tudo' || valStr === 'all' ? amount : valStr) || amount <= 0) {
         return reply('⚠️ Digite um valor numérico válido maior que zero.');
       }
 
@@ -80,9 +82,10 @@ export async function handleBankMarketCommands(sock, msg, command, args, sender)
         return reply(`⚠️ Você não tem **$${amount.toLocaleString('pt-BR')}** no banco. Saldo bancário atual: **$${user.bank.toLocaleString('pt-BR')}**.`);
       }
 
-      const newWallet = user.wallet + amount;
       const newBank = user.bank - amount;
-      updateUser(sender, { wallet: newWallet, bank: newBank });
+      await updateUser(sender, { bank: newBank });
+      await addBalance(sender, amount);
+      const updatedUser = getUser(sender);
 
       return reply(`🏧 *SAQUE BANCÁRIO REALIZADO!*\n\n` +
                    `💵 *Sacado:* $${amount.toLocaleString('pt-BR')}\n` +
@@ -226,15 +229,26 @@ export async function handleBankMarketCommands(sock, msg, command, args, sender)
       if (sub === 'brincar') {
         if (!extraData.pet) return reply('⚠️ Você não possui um pet! Adote um com `/pet comprar cachorro`.');
 
+        const now = Date.now();
+        const PET_PLAY_COOLDOWN = 5 * 60 * 1000; // 5 minutos de cooldown persistente
+        const lastPlayed = Number(extraData.pet.lastPlayed) || 0;
+        if (now - lastPlayed < PET_PLAY_COOLDOWN) {
+          const remaining = PET_PLAY_COOLDOWN - (now - lastPlayed);
+          const minutes = Math.floor(remaining / (1000 * 60));
+          const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+          return reply(`⏳ *SEU PET ESTÁ CANSADO!*\n\nSeu companheiro precisa descansar um pouco antes da próxima brincadeira.\n⏱️ *Aguarde:* *${minutes}m ${seconds}s*`);
+        }
+
         extraData.pet.happiness = Math.min(100, (extraData.pet.happiness || 50) + 15);
-        extraData.pet.lastPlayed = Date.now();
+        extraData.pet.lastPlayed = now;
 
         // Pet feliz rende moedas bônus!
         const petLvl = Number(extraData.pet.level || 1);
-        const bonusMoney = Math.floor(((PETS[extraData.pet.type]?.baseIncome || 200) + (petLvl * 50)) * (extraData.pet.happiness / 100));
-        const newWallet = user.wallet + bonusMoney;
+        const rawBonus = Math.floor(((PETS[extraData.pet.type]?.baseIncome || 200) + (petLvl * 50)) * (extraData.pet.happiness / 100));
+        const bonusMoney = sanitizeMoney(rawBonus);
 
-        updateUser(sender, { wallet: newWallet, extra_data: JSON.stringify(extraData) });
+        await addBalance(sender, bonusMoney);
+        await updateUser(sender, { extra_data: JSON.stringify(extraData) });
 
         return reply(`🎾 *BRINCADEIRA COM O PET!*\n\n` +
                      `Você brincou com seu pet! Ele amou a diversão!\n` +

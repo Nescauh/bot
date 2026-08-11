@@ -8,16 +8,16 @@ export const Priority = {
 
 class QueueManager {
   constructor() {
-    // Fila de Envio de Mensagens (sock.sendMessage) por Chat JID: Map<chatJid, Array<MessageTask>>
-    this.messageQueues = new Map();
-    this.isProcessingMessageMap = new Map();
+    // Fila Única Global de Envio de Mensagens (sock.sendMessage)
+    this.globalMessageQueue = [];
+    this.isProcessingGlobalMessage = false;
 
     // Fila de Comandos Pesados (/play, /video, /ia, /tts, /ocr) por Chat JID: Map<chatJid, Array<HeavyTask>>
     this.heavyQueues = new Map();
     this.isProcessingHeavyMap = new Map();
 
-    // Configuração de delay humanizado (1800ms a 3000ms, média ~2.5s)
-    this.minDelay = 1800;
+    // Configuração de delay humanizado (2000ms a 3000ms, 2.0s a 3.0s)
+    this.minDelay = 2000;
     this.maxDelay = 3000;
 
     // Métricas estatísticas
@@ -31,16 +31,15 @@ class QueueManager {
     };
   }
 
-  // Helper de log padronizado
   log(msg) {
-    console.log(`[QUEUE]\n${msg}`);
+    console.log(`[QUEUE] ${msg}`);
   }
 
   logErr(msg, err) {
     console.error(`[QUEUE ERROR] ${msg}`, err || '');
   }
 
-  // Obtém intervalo humanizado aleatório entre minDelay e maxDelay
+  // Obtém intervalo humanizado aleatório entre 2000ms e 3000ms
   getRandomHumanDelay() {
     const min = Math.max(0, this.minDelay);
     const max = Math.max(min, this.maxDelay);
@@ -50,78 +49,64 @@ class QueueManager {
     return delay;
   }
 
-  // --- FILA DE MENSAGENS (sock.sendMessage) ---
+  // --- FILA GLOBAL DE MENSAGENS (sock.sendMessage) ---
   enqueueMessage(chatJid, sendFn, priority = Priority.NORMAL) {
-    if (!chatJid) chatJid = 'global';
-
-    if (!this.messageQueues.has(chatJid)) {
-      this.messageQueues.set(chatJid, []);
-    }
-
-    const queue = this.messageQueues.get(chatJid);
-
     const taskItem = {
       id: Date.now() + Math.random(),
+      chatJid: chatJid || 'global',
       sendFn,
       priority,
       addedAt: Date.now()
     };
 
     this.stats.messagesQueued++;
+    this.log('Mensagem adicionada');
 
-    // Insere ordenado por prioridade (HIGH=1 > NORMAL=2 > LOW=3)
+    // Insere mantendo a ordem FIFO e a prioridade se necessário
     let inserted = false;
-    for (let i = 0; i < queue.length; i++) {
-      if (taskItem.priority < queue[i].priority) {
-        queue.splice(i, 0, taskItem);
+    for (let i = 0; i < this.globalMessageQueue.length; i++) {
+      if (taskItem.priority < this.globalMessageQueue[i].priority) {
+        this.globalMessageQueue.splice(i, 0, taskItem);
         inserted = true;
         break;
       }
     }
     if (!inserted) {
-      queue.push(taskItem);
+      this.globalMessageQueue.push(taskItem);
     }
 
-    this.processNextMessage(chatJid);
+    this.processGlobalQueue();
   }
 
-  async processNextMessage(chatJid) {
-    if (this.isProcessingMessageMap.get(chatJid)) {
+  async processGlobalQueue() {
+    if (this.isProcessingGlobalMessage) {
       return;
     }
 
-    const queue = this.messageQueues.get(chatJid);
-    if (!queue || queue.length === 0) {
-      this.messageQueues.delete(chatJid);
-      this.isProcessingMessageMap.delete(chatJid);
-      return;
-    }
+    this.isProcessingGlobalMessage = true;
 
-    this.isProcessingMessageMap.set(chatJid, true);
+    while (this.globalMessageQueue.length > 0) {
+      const currentTask = this.globalMessageQueue.shift();
 
-    while (queue.length > 0) {
-      const currentTask = queue.shift();
+      const delay = this.getRandomHumanDelay();
+      this.log(`Aguardando ${delay}ms`);
+      if (delay > 0) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
 
       try {
         await currentTask.sendFn();
         this.stats.completedTasks++;
+        this.log('Mensagem enviada');
       } catch (err) {
-        this.logErr('Erro no envio da mensagem enfileirada:', err);
-      }
-
-      if (queue.length > 0) {
-        const delay = this.getRandomHumanDelay();
-        if (delay > 0) {
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
+        this.logErr('Erro ao enviar mensagem', err);
       }
     }
 
-    this.isProcessingMessageMap.set(chatJid, false);
-    this.messageQueues.delete(chatJid);
+    this.isProcessingGlobalMessage = false;
   }
 
-  // --- FILA DE COMANDOS PESADOS (/play, /video, /ia, /tts, /ocr) ---
+  // --- FILA SEPARADA DE COMANDOS PESADOS (/play, /video, /ia, /tts, /ocr) ---
   enqueueHeavyCommand(chatJid, commandName, taskFn) {
     if (!chatJid) chatJid = 'global';
 
@@ -146,7 +131,7 @@ class QueueManager {
         reject
       });
 
-      this.log('Comando adicionado.');
+      this.log(`Comando pesado /${commandName} adicionado para execução.`);
       this.processNextHeavy(chatJid);
     });
   }
@@ -167,20 +152,12 @@ class QueueManager {
 
     while (queue.length > 0) {
       const item = queue.shift();
-      this.log('Iniciando processamento.');
-
       try {
         const result = await item.taskFn();
-        this.log('Finalizado.');
         item.resolve(result);
       } catch (err) {
         this.logErr(`Erro ao processar comando pesado /${item.commandName}:`, err);
-        this.log('Finalizado.');
         item.reject(err);
-      }
-
-      if (queue.length > 0) {
-        this.log('Próximo da fila.');
       }
     }
 
@@ -205,7 +182,7 @@ class QueueManager {
           console.warn(`[QUEUE RETRY] Falha no envio para ${jid}. Tentativa ${attempt}/${delays.length}. Aguardando ${retryDelay / 1000}s...`);
           await new Promise(resolve => setTimeout(resolve, retryDelay));
         } else {
-          this.log('Falha definitiva.');
+          this.logErr('Falha definitiva ao enviar mensagem.', err);
           throw err;
         }
       }
@@ -231,6 +208,7 @@ class QueueManager {
   }
 
   wrapSocket(sock) {
+    if (!sock) return sock;
     if (sock._isQueueWrapped) return sock;
 
     const self = this;
@@ -247,22 +225,6 @@ class QueueManager {
   }
 
   getStats() {
-    let activeQueues = 0;
-    let totalPendingMessages = 0;
-
-    for (const [jid, q] of this.messageQueues.entries()) {
-      if (q.length > 0) {
-        activeQueues++;
-        totalPendingMessages += q.length;
-      }
-    }
-    for (const [jid, q] of this.heavyQueues.entries()) {
-      if (q.length > 0) {
-        if (!this.messageQueues.has(jid)) activeQueues++;
-        totalPendingMessages += q.length;
-      }
-    }
-
     const avgDelay = this.stats.delaySamples > 0 
       ? (this.stats.totalDelayMs / this.stats.delaySamples / 1000).toFixed(1)
       : '2.5';
@@ -271,8 +233,7 @@ class QueueManager {
       messagesQueued: this.stats.messagesQueued,
       downloadsQueued: this.stats.downloadsQueued,
       iaQueued: this.stats.iaQueued,
-      pendingMessages: totalPendingMessages,
-      activeQueues,
+      pendingMessages: this.globalMessageQueue.length,
       avgDelay: `${avgDelay}s`,
       isActive: true
     };

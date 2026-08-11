@@ -33,6 +33,14 @@ export async function addBalance(jid, amount) {
   return await userRepository.addBalance(jid, amount);
 }
 
+export async function deductBalance(jid, amount) {
+  return await userRepository.deductBalance(jid, amount);
+}
+
+export async function addAura(jid, amount) {
+  return await userRepository.addAura(jid, amount);
+}
+
 export async function saveUser(user) {
   return await userRepository.saveUser(user);
 }
@@ -87,5 +95,7 @@ export async function deleteReminder(id) {
 export async function transferMoney(senderJid, targetJid, amount) {
   return await databaseManager.transferMoney(senderJid, targetJid, amount);
 }
+
+export { saveBirthday, getBirthday, removeBirthday, getAllBirthdays, updateNotificationYear } from './BirthdayRepository.js';
 
 export default databaseManager;

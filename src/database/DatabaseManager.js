@@ -2,6 +2,7 @@ import 'dotenv/config';
 import initSqlJs from 'sql.js';
 import path from 'path';
 import fs from 'fs';
+import { ECONOMIC_LIMITS, sanitizeMoney, sanitizeXP, sanitizeAura, checkEconomicLimit } from '../utils/economicValidation.js';
 
 const DB_PATH = path.resolve('bot_data.sqlite');
 const LEGACY_JSON_PATH = path.resolve('database.json');
@@ -10,7 +11,7 @@ const BACKUPS_DIR = path.resolve('backups');
 
 const KNOWN_USER_KEYS = [
   'jid', 'wallet', 'bank', 'xp', 'level', 'aura',
-  'last_daily', 'last_work', 'last_aura_farm', 'daily_streak',
+  'last_daily', 'last_work', 'last_aura_farm', 'last_pescar', 'daily_streak',
   'inventory', 'extra_data', 'created_at', 'updated_at'
 ];
 
@@ -29,7 +30,8 @@ class DatabaseManager {
       reminders: [],
       casamentos: {},
       pedidosCasamento: {},
-      autorizadosVer: []
+      autorizadosVer: [],
+      birthdays: {}
     };
     this.isInitialized = false;
   }
@@ -165,6 +167,7 @@ class DatabaseManager {
             last_daily BIGINT DEFAULT 0,
             last_work BIGINT DEFAULT 0,
             last_aura_farm BIGINT DEFAULT 0,
+            last_pescar BIGINT DEFAULT 0,
             daily_streak INTEGER DEFAULT 0,
             inventory TEXT DEFAULT '[]',
             extra_data TEXT DEFAULT '{}',
@@ -209,6 +212,18 @@ class DatabaseManager {
 
           `CREATE TABLE IF NOT EXISTS autorizados_ver (
             user_jid TEXT PRIMARY KEY
+          );`,
+
+          `CREATE TABLE IF NOT EXISTS birthdays (
+            user_jid TEXT PRIMARY KEY,
+            birthday_date TEXT NOT NULL,
+            day INTEGER NOT NULL,
+            month INTEGER NOT NULL,
+            year INTEGER NOT NULL,
+            notification_year INTEGER DEFAULT 0,
+            chat_jid TEXT DEFAULT '',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
           );`
         ]
       : [
@@ -227,6 +242,7 @@ class DatabaseManager {
             last_daily INTEGER DEFAULT 0,
             last_work INTEGER DEFAULT 0,
             last_aura_farm INTEGER DEFAULT 0,
+            last_pescar INTEGER DEFAULT 0,
             daily_streak INTEGER DEFAULT 0,
             inventory TEXT DEFAULT '[]',
             extra_data TEXT DEFAULT '{}',
@@ -271,6 +287,18 @@ class DatabaseManager {
 
           `CREATE TABLE IF NOT EXISTS autorizados_ver (
             user_jid TEXT PRIMARY KEY
+          );`,
+
+          `CREATE TABLE IF NOT EXISTS birthdays (
+            user_jid TEXT PRIMARY KEY,
+            birthday_date TEXT NOT NULL,
+            day INTEGER NOT NULL,
+            month INTEGER NOT NULL,
+            year INTEGER NOT NULL,
+            notification_year INTEGER DEFAULT 0,
+            chat_jid TEXT DEFAULT '',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
           );`
         ];
 
@@ -289,7 +317,8 @@ class DatabaseManager {
     if (this.isPg) {
       const pgAlters = [
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();',
-        'ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();'
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS last_pescar BIGINT DEFAULT 0;'
       ];
       for (const alt of pgAlters) {
         try { await this.pgClient.query(alt); } catch (_) {}
@@ -298,6 +327,7 @@ class DatabaseManager {
       const alters = [
         'ALTER TABLE users ADD COLUMN aura INTEGER DEFAULT 0',
         'ALTER TABLE users ADD COLUMN last_aura_farm INTEGER DEFAULT 0',
+        'ALTER TABLE users ADD COLUMN last_pescar INTEGER DEFAULT 0',
         'ALTER TABLE users ADD COLUMN daily_streak INTEGER DEFAULT 0',
         'ALTER TABLE users ADD COLUMN extra_data TEXT DEFAULT "{}"',
         'ALTER TABLE group_configs ADD COLUMN anti_delete INTEGER DEFAULT 0'
@@ -463,6 +493,19 @@ class DatabaseManager {
 
         const resAutorizados = await this.pgClient.query('SELECT * FROM autorizados_ver');
         this.memoryStore.autorizadosVer = resAutorizados.rows.map(a => a.user_jid);
+
+        try {
+          const resBirthdays = await this.pgClient.query('SELECT * FROM birthdays');
+          resBirthdays.rows.forEach(b => {
+            this.memoryStore.birthdays[b.user_jid] = {
+              ...b,
+              day: Number(b.day),
+              month: Number(b.month),
+              year: Number(b.year),
+              notification_year: Number(b.notification_year || 0)
+            };
+          });
+        } catch (_) {}
       } catch (err) {
         this.logErr('Erro ao carregar dados do PostgreSQL:', err);
       }
@@ -561,7 +604,28 @@ class DatabaseManager {
       try {
         const resAutorizados = this.dbInstance.exec('SELECT * FROM autorizados_ver');
         if (resAutorizados.length > 0) {
-          this.memoryStore.autorizadosVer = resAutorizados[0].values.map(row => row[0]);
+          const cols = resAutorizados[0].columns;
+          this.memoryStore.autorizadosVer = resAutorizados[0].values.map(row => row[cols.indexOf('user_jid')]);
+        }
+      } catch (_) {}
+
+      try {
+        const resBirthdays = this.dbInstance.exec('SELECT * FROM birthdays');
+        if (resBirthdays.length > 0) {
+          const cols = resBirthdays[0].columns;
+          resBirthdays[0].values.forEach(row => {
+            const b = {};
+            cols.forEach((col, idx) => b[col] = row[idx]);
+            if (b.user_jid) {
+              this.memoryStore.birthdays[b.user_jid] = {
+                ...b,
+                day: Number(b.day),
+                month: Number(b.month),
+                year: Number(b.year),
+                notification_year: Number(b.notification_year || 0)
+              };
+            }
+          });
         }
       } catch (_) {}
     }
@@ -661,7 +725,9 @@ class DatabaseManager {
     try {
       // 1. Salva Usuários
       for (const [jid, user] of Object.entries(this.memoryStore.users)) {
-        await this.persistUser(user);
+        if (user && user.jid) {
+          await this.persistUser(user);
+        }
       }
 
       // 2. Salva Warns
@@ -777,14 +843,15 @@ class DatabaseManager {
 
     try {
       const jid = user.jid;
-      const wallet = Number(user.wallet) || 0;
-      const bank = Number(user.bank) || 0;
-      const xp = Number(user.xp) || 0;
-      const level = Number(user.level) || 1;
-      const aura = Number(user.aura) || 0;
+      const wallet = sanitizeMoney(user.wallet);
+      const bank = sanitizeMoney(user.bank);
+      const xp = sanitizeXP(user.xp);
+      const level = Math.max(1, sanitizeMoney(user.level, 1));
+      const aura = sanitizeAura(user.aura);
       const last_daily = Number(user.last_daily) || 0;
       const last_work = Number(user.last_work) || 0;
       const last_aura_farm = Number(user.last_aura_farm) || 0;
+      const last_pescar = Number(user.last_pescar) || 0;
       const daily_streak = Number(user.daily_streak) || 0;
       const inventory = typeof user.inventory === 'string' ? user.inventory : JSON.stringify(user.inventory || []);
 
@@ -813,23 +880,29 @@ class DatabaseManager {
       const extra_data_str = JSON.stringify(consolidatedExtra);
 
       // Atualiza estado em memória
+      user.wallet = wallet;
+      user.bank = bank;
+      user.xp = xp;
+      user.level = level;
+      user.aura = aura;
+      user.last_pescar = last_pescar;
       user.extra_data = extra_data_str;
       Object.assign(user, consolidatedExtra);
       this.memoryStore.users[jid] = user;
 
       if (this.isPg) {
         await this.pgClient.query(
-          `INSERT INTO users (jid, wallet, bank, xp, level, aura, last_daily, last_work, last_aura_farm, daily_streak, inventory, extra_data, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+          `INSERT INTO users (jid, wallet, bank, xp, level, aura, last_daily, last_work, last_aura_farm, last_pescar, daily_streak, inventory, extra_data, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
            ON CONFLICT (jid) DO UPDATE SET
-           wallet = $2, bank = $3, xp = $4, level = $5, aura = $6, last_daily = $7, last_work = $8, last_aura_farm = $9, daily_streak = $10, inventory = $11, extra_data = $12, updated_at = NOW()`,
-          [jid, wallet, bank, xp, level, aura, last_daily, last_work, last_aura_farm, daily_streak, inventory, extra_data_str]
+           wallet = $2, bank = $3, xp = $4, level = $5, aura = $6, last_daily = $7, last_work = $8, last_aura_farm = $9, last_pescar = $10, daily_streak = $11, inventory = $12, extra_data = $13, updated_at = NOW()`,
+          [jid, wallet, bank, xp, level, aura, last_daily, last_work, last_aura_farm, last_pescar, daily_streak, inventory, extra_data_str]
         );
       } else if (this.dbInstance) {
         this.dbInstance.run(
-          `INSERT OR REPLACE INTO users (jid, wallet, bank, xp, level, aura, last_daily, last_work, last_aura_farm, daily_streak, inventory, extra_data)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [jid, wallet, bank, xp, level, aura, last_daily, last_work, last_aura_farm, daily_streak, inventory, extra_data_str]
+          `INSERT OR REPLACE INTO users (jid, wallet, bank, xp, level, aura, last_daily, last_work, last_aura_farm, last_pescar, daily_streak, inventory, extra_data)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [jid, wallet, bank, xp, level, aura, last_daily, last_work, last_aura_farm, last_pescar, daily_streak, inventory, extra_data_str]
         );
         this.persistSqliteFile();
       }
@@ -854,6 +927,7 @@ class DatabaseManager {
         last_daily: 0,
         last_work: 0,
         last_aura_farm: 0,
+        last_pescar: 0,
         daily_streak: 0,
         inventory: '[]',
         extra_data: '{}'
@@ -864,14 +938,15 @@ class DatabaseManager {
     }
 
     const u = this.memoryStore.users[jid];
-    u.wallet = Number(u.wallet) || 0;
-    u.bank = Number(u.bank) || 0;
-    u.xp = Number(u.xp) || 0;
-    u.level = Number(u.level) || 1;
-    u.aura = Number(u.aura) || 0;
+    u.wallet = sanitizeMoney(u.wallet);
+    u.bank = sanitizeMoney(u.bank);
+    u.xp = sanitizeXP(u.xp);
+    u.level = Math.max(1, sanitizeMoney(u.level, 1));
+    u.aura = sanitizeAura(u.aura);
     u.last_daily = Number(u.last_daily) || 0;
     u.last_work = Number(u.last_work) || 0;
     u.last_aura_farm = Number(u.last_aura_farm) || 0;
+    u.last_pescar = Number(u.last_pescar) || 0;
     u.daily_streak = Number(u.daily_streak) || 0;
     u.inventory = u.inventory || '[]';
 
@@ -891,6 +966,12 @@ class DatabaseManager {
         const parsed = this.parseExtraData(val);
         user.extra_data = JSON.stringify(parsed);
         Object.assign(user, parsed);
+      } else if (key === 'wallet' || key === 'bank') {
+        user[key] = sanitizeMoney(val);
+      } else if (key === 'xp') {
+        user.xp = sanitizeXP(val);
+      } else if (key === 'aura') {
+        user.aura = sanitizeAura(val);
       } else {
         user[key] = typeof val === 'object' ? JSON.stringify(val) : val;
       }
@@ -1059,10 +1140,142 @@ class DatabaseManager {
     }
   }
 
+  // --- OPERAÇÕES ATÔMICAS DE ECONOMIA ---
+  async deductWalletAtomic(jid, amount) {
+    const numAmount = sanitizeMoney(amount);
+    if (!jid || numAmount <= 0) return false;
+
+    const user = this.getUser(jid);
+    if (!user || user.wallet < numAmount) return false;
+
+    if (this.isPg) {
+      try {
+        const res = await this.pgClient.query(
+          'UPDATE users SET wallet = wallet - $1, updated_at = NOW() WHERE jid = $2 AND wallet >= $1 RETURNING wallet',
+          [numAmount, jid]
+        );
+        if (res.rowCount === 0) return false;
+        user.wallet = Number(res.rows[0].wallet);
+        return true;
+      } catch (err) {
+        this.logErr(`Erro no deductWalletAtomic (PG) para ${jid}:`, err);
+        return false;
+      }
+    } else if (this.dbInstance) {
+      try {
+        this.dbInstance.run('BEGIN TRANSACTION');
+        const checkRes = this.dbInstance.exec(`SELECT wallet FROM users WHERE jid = '${jid}'`);
+        const currentW = (checkRes.length > 0 && checkRes[0].values.length > 0) ? Number(checkRes[0].values[0][0]) : 0;
+        if (currentW < numAmount) {
+          this.dbInstance.run('ROLLBACK');
+          return false;
+        }
+        const newW = currentW - numAmount;
+        this.dbInstance.run(`UPDATE users SET wallet = ${newW} WHERE jid = '${jid}'`);
+        this.dbInstance.run('COMMIT');
+        user.wallet = newW;
+        this.persistSqliteFile();
+        return true;
+      } catch (err) {
+        try { this.dbInstance.run('ROLLBACK'); } catch (_) {}
+        this.logErr(`Erro no deductWalletAtomic (SQLite) para ${jid}:`, err);
+        return false;
+      }
+    } else {
+      if (user.wallet < numAmount) return false;
+      user.wallet -= numAmount;
+      return true;
+    }
+  }
+
+  async addWalletAtomic(jid, amount) {
+    const numAmount = sanitizeMoney(amount);
+    if (!jid || numAmount <= 0) return this.getUser(jid);
+
+    const user = this.getUser(jid);
+    if (!user) return null;
+
+    const limitCheck = checkEconomicLimit(user.wallet, numAmount, ECONOMIC_LIMITS.MAX_WALLET, jid, 'wallet');
+    if (!limitCheck.allowed || limitCheck.maxAddable <= 0) {
+      return user;
+    }
+
+    const addVal = limitCheck.maxAddable;
+    if (this.isPg) {
+      try {
+        const res = await this.pgClient.query(
+          'UPDATE users SET wallet = LEAST(wallet + $1, $3::bigint), updated_at = NOW() WHERE jid = $2 RETURNING wallet',
+          [addVal, jid, ECONOMIC_LIMITS.MAX_WALLET]
+        );
+        if (res.rows.length > 0) {
+          user.wallet = Number(res.rows[0].wallet);
+        }
+      } catch (err) {
+        this.logErr(`Erro no addWalletAtomic (PG) para ${jid}:`, err);
+        user.wallet += addVal;
+      }
+    } else if (this.dbInstance) {
+      try {
+        const newW = Math.min(ECONOMIC_LIMITS.MAX_WALLET, (Number(user.wallet) || 0) + addVal);
+        this.dbInstance.run(`UPDATE users SET wallet = ${newW} WHERE jid = '${jid}'`);
+        user.wallet = newW;
+        this.persistSqliteFile();
+      } catch (err) {
+        this.logErr(`Erro no addWalletAtomic (SQLite) para ${jid}:`, err);
+        user.wallet += addVal;
+      }
+    } else {
+      user.wallet = Math.min(ECONOMIC_LIMITS.MAX_WALLET, (Number(user.wallet) || 0) + addVal);
+    }
+    return user;
+  }
+
+  async addXPAtomic(jid, amount) {
+    const numAmount = sanitizeXP(amount);
+    if (!jid || numAmount <= 0) return this.getUser(jid);
+
+    const user = this.getUser(jid);
+    if (!user) return null;
+
+    const limitCheck = checkEconomicLimit(user.xp, numAmount, ECONOMIC_LIMITS.MAX_XP, jid, 'xp');
+    if (!limitCheck.allowed || limitCheck.maxAddable <= 0) {
+      return user;
+    }
+
+    const addVal = limitCheck.maxAddable;
+    const newXP = (Number(user.xp) || 0) + addVal;
+    const newLevel = Math.floor(Math.sqrt(newXP / 50)) + 1;
+
+    user.xp = newXP;
+    user.level = Math.max(Number(user.level || 1), newLevel);
+
+    await this.persistUser(user);
+    return user;
+  }
+
+  async addAuraAtomic(jid, amount) {
+    const numAmount = sanitizeAura(amount);
+    if (!jid || numAmount <= 0) return this.getUser(jid);
+
+    const user = this.getUser(jid);
+    if (!user) return null;
+
+    const limitCheck = checkEconomicLimit(user.aura, numAmount, ECONOMIC_LIMITS.MAX_AURA, jid, 'aura');
+    if (!limitCheck.allowed || limitCheck.maxAddable <= 0) {
+      return user;
+    }
+
+    const addVal = limitCheck.maxAddable;
+    user.aura = (Number(user.aura) || 0) + addVal;
+
+    await this.persistUser(user);
+    return user;
+  }
+
   // --- TRANSAÇÕES FINANCEIRAS ATÔMICAS ---
   async transferMoney(senderJid, targetJid, amount) {
-    const numAmount = Number(amount);
-    if (!senderJid || !targetJid || isNaN(numAmount) || numAmount <= 0) {
+    const numAmount = sanitizeMoney(amount);
+    if (!senderJid || !targetJid || numAmount <= 0) {
       throw new Error('Parâmetros de transferência inválidos.');
     }
     if (senderJid === targetJid) {
@@ -1072,21 +1285,37 @@ class DatabaseManager {
     const senderUser = this.getUser(senderJid);
     const targetUser = this.getUser(targetJid);
 
-    if ((senderUser.wallet || 0) < numAmount) {
+    if (!senderUser || (senderUser.wallet || 0) < numAmount) {
       throw new Error('Saldo insuficiente.');
     }
 
+    const limitCheck = checkEconomicLimit(targetUser.wallet, numAmount, ECONOMIC_LIMITS.MAX_WALLET, targetJid, 'wallet (transferência)');
+    if (!limitCheck.allowed || limitCheck.maxAddable <= 0) {
+      throw new Error('O destinatário já atingiu o limite máximo de moedas.');
+    }
+
+    const actualTransfer = limitCheck.maxAddable;
     const newSenderWallet = senderUser.wallet - numAmount;
-    const newTargetWallet = (targetUser.wallet || 0) + numAmount;
+    const newTargetWallet = targetUser.wallet + actualTransfer;
 
     if (this.isPg) {
       try {
         await this.pgClient.query('BEGIN');
-        await this.pgClient.query('UPDATE users SET wallet = $1 WHERE jid = $2', [newSenderWallet, senderJid]);
-        await this.pgClient.query('UPDATE users SET wallet = $1 WHERE jid = $2', [newTargetWallet, targetJid]);
+        const resSender = await this.pgClient.query(
+          'UPDATE users SET wallet = wallet - $1, updated_at = NOW() WHERE jid = $2 AND wallet >= $1 RETURNING wallet',
+          [numAmount, senderJid]
+        );
+        if (resSender.rowCount === 0) {
+          await this.pgClient.query('ROLLBACK');
+          throw new Error('Saldo insuficiente na operação atômica.');
+        }
+        await this.pgClient.query(
+          'UPDATE users SET wallet = LEAST(wallet + $1, $3::bigint), updated_at = NOW() WHERE jid = $2',
+          [actualTransfer, targetJid, ECONOMIC_LIMITS.MAX_WALLET]
+        );
         await this.pgClient.query('COMMIT');
 
-        senderUser.wallet = newSenderWallet;
+        senderUser.wallet = Number(resSender.rows[0].wallet);
         targetUser.wallet = newTargetWallet;
         return true;
       } catch (err) {
@@ -1097,8 +1326,8 @@ class DatabaseManager {
     } else if (this.dbInstance) {
       try {
         this.dbInstance.run('BEGIN TRANSACTION');
-        this.dbInstance.run('UPDATE users SET wallet = ? WHERE jid = ?', [newSenderWallet, senderJid]);
-        this.dbInstance.run('UPDATE users SET wallet = ? WHERE jid = ?', [newTargetWallet, targetJid]);
+        this.dbInstance.run('UPDATE users SET wallet = wallet - ? WHERE jid = ?', [numAmount, senderJid]);
+        this.dbInstance.run('UPDATE users SET wallet = wallet + ? WHERE jid = ?', [actualTransfer, targetJid]);
         this.dbInstance.run('COMMIT');
 
         senderUser.wallet = newSenderWallet;
@@ -1114,6 +1343,34 @@ class DatabaseManager {
       senderUser.wallet = newSenderWallet;
       targetUser.wallet = newTargetWallet;
       return true;
+    }
+  }
+
+  async persistBirthday(b) {
+    if (!b || !b.user_jid) return;
+    if (this.isPg) {
+      try {
+        await this.pgClient.query(
+          `INSERT INTO birthdays (user_jid, birthday_date, day, month, year, notification_year, chat_jid, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+           ON CONFLICT (user_jid) DO UPDATE SET
+             birthday_date = $2, day = $3, month = $4, year = $5, notification_year = $6, chat_jid = $7, updated_at = NOW()`,
+          [b.user_jid, b.birthday_date, b.day, b.month, b.year, b.notification_year || 0, b.chat_jid || '']
+        );
+      } catch (err) {
+        this.logErr(`Erro ao persistir aniversário de ${b.user_jid} no PG:`, err);
+      }
+    } else if (this.dbInstance) {
+      try {
+        this.dbInstance.run(
+          `INSERT OR REPLACE INTO birthdays (user_jid, birthday_date, day, month, year, notification_year, chat_jid, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+          [b.user_jid, b.birthday_date, b.day, b.month, b.year, b.notification_year || 0, b.chat_jid || '']
+        );
+        this.persistSqliteFile();
+      } catch (err) {
+        this.logErr(`Erro ao persistir aniversário de ${b.user_jid} no SQLite:`, err);
+      }
     }
   }
 

@@ -29,6 +29,8 @@ import { handleRegrasCommand } from './commands/admin_extra/regras.js';
 import { handleWarnCommand } from './commands/admin_extra/warn.js';
 import { handleWarningsCommand } from './commands/admin_extra/warnings.js';
 
+import { handleBirthdayCommands, handleAniversariantesCommand } from './commands/birthday.js';
+
 import { handleShipCommand } from './commands/fun/ship.js';
 import { handleEightBallCommand } from './commands/fun/eightball.js';
 import { handleDadoCommand } from './commands/fun/dado.js';
@@ -667,6 +669,13 @@ export async function handleMessages(rawSock, msg) {
     else if (command === 'lembrete') await handleLembreteCommand(sock, msg, args, sender);
     else if (command === 'qrcode') await handleQrcodeCommand(sock, msg, args);
     else if (command === 'readqr') await handleReadqrCommand(sock, msg);
+    // 🎂 Sistema de Aniversários
+    else if (['aniversario', 'aniver', 'niver', 'meuaniversario'].includes(command)) {
+      await handleBirthdayCommands(sock, msg, command, args, sender);
+    }
+    else if (['aniversariantes', 'aniversarios', 'proximosaniversarios'].includes(command)) {
+      await handleAniversariantesCommand(sock, msg);
+    }
     else if (command === 'tts') await queueManager.enqueueHeavyCommand(from, command, () => handleTtsCommand(sock, msg, args));
     else if (command === 'ocr') await queueManager.enqueueHeavyCommand(from, command, () => handleOcrCommand(sock, msg));
     // 📊 Status da Fila

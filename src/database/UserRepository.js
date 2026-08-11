@@ -35,40 +35,43 @@ class UserRepository {
   }
 
   /**
-   * Adiciona XP para um usuário.
+   * Adiciona XP para um usuário atómicamente.
    * @param {string} jid 
    * @param {number} amount 
    * @returns {Promise<object>} Usuário atualizado
    */
   async addXP(jid, amount) {
-    const user = this.getUser(jid);
-    if (!user) return null;
-    const currentXP = Number(user.xp || 0);
-    const newXP = currentXP + Number(amount || 0);
-    
-    // Cálculo padronizado de nível baseado em XP
-    const newLevel = Math.floor(Math.sqrt(newXP / 50)) + 1;
-
-    await this.updateUser(jid, {
-      xp: newXP,
-      level: Math.max(Number(user.level || 1), newLevel)
-    });
-    return this.getUser(jid);
+    return await databaseManager.addXPAtomic(jid, amount);
   }
 
   /**
-   * Adiciona saldo (carteira) para um usuário.
+   * Adiciona saldo (carteira) para um usuário atómicamente.
    * @param {string} jid 
    * @param {number} amount 
    * @returns {Promise<object>} Usuário atualizado
    */
   async addBalance(jid, amount) {
-    const user = this.getUser(jid);
-    if (!user) return null;
-    const currentWallet = Number(user.wallet || 0);
-    const newWallet = currentWallet + Number(amount || 0);
-    await this.updateUser(jid, { wallet: Math.max(0, newWallet) });
-    return this.getUser(jid);
+    return await databaseManager.addWalletAtomic(jid, amount);
+  }
+
+  /**
+   * Deduz saldo (carteira) de um usuário atómicamente se possuir saldo suficiente.
+   * @param {string} jid 
+   * @param {number} amount 
+   * @returns {Promise<boolean>} Sucesso da dedução
+   */
+  async deductBalance(jid, amount) {
+    return await databaseManager.deductWalletAtomic(jid, amount);
+  }
+
+  /**
+   * Adiciona Aura para um usuário atómicamente.
+   * @param {string} jid 
+   * @param {number} amount 
+   * @returns {Promise<object>} Usuário atualizado
+   */
+  async addAura(jid, amount) {
+    return await databaseManager.addAuraAtomic(jid, amount);
   }
 
   /**

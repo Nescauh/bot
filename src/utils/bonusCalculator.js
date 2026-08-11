@@ -1,3 +1,5 @@
+import { getRebirthBonus } from '../config/rebirthConfig.js';
+
 /**
  * bonusCalculator.js
  * Utilitário centralizado de cálculo de bônus, atributos e estatísticas para o Quintuplets Bot.
@@ -119,9 +121,17 @@ export function calculateBonusRewards(user, baseCoins = 0, baseXp = 0, contextTy
   const petInfo = getPetData(extraData.pet);
   const petLevel = Number(extraData.pet?.level || 1);
   const prestige = Number(user.prestige || extraData.prestige || 0);
+  const rebirths = Number(user.rebirths || extraData.rebirths || 0);
+  const rebirthBonus = getRebirthBonus(rebirths);
 
   let coinMultiplier = 1.0;
   let xpMultiplier = 1.0;
+
+  // Bônus Permanente de Rebirth
+  if (rebirthBonus) {
+    coinMultiplier += rebirthBonus.coinBonusPct;
+    xpMultiplier += rebirthBonus.xpBonusPct;
+  }
 
   // Evento Ativo (+15% em tudo)
   coinMultiplier += 0.15;

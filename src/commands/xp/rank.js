@@ -1,19 +1,8 @@
-import { getUser } from '../../database/sqlite.js';
-import { getDatabase } from '../../database.js';
+import { getUser, getDatabase } from '../../database/sqlite.js';
 import { askAi } from '../../utils/aiService.js';
 import { getUserStats, getAuraBuffs } from '../../utils/bonusCalculator.js';
-
-function formatDuration(ms) {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (days > 0) return `${days} dia(s)`;
-  if (hours > 0) return `${hours} hora(s)`;
-  if (minutes > 0) return `${minutes} minuto(s)`;
-  return `${seconds} segundo(s)`;
-}
+import { formatDuration } from '../../utils/helpers.js';
+import { getRebirthRequirements } from '../../config/rebirthConfig.js';
 
 export async function handleRankCommand(sock, msg, sender, mentioned) {
   const from = msg.key.remoteJid;
@@ -49,6 +38,14 @@ export async function handleRankCommand(sock, msg, sender, mentioned) {
   const prestige = extraData.prestige || 0;
   const prestigeStr = prestige > 0 ? `⭐ Prestígio ${'I'.repeat(prestige)} (+${prestige * 10}% bônus)` : 'Nenhum (0)';
 
+  const rebirths = Number(user.rebirths || 0);
+  const rebirthReq = rebirths > 0 ? getRebirthRequirements(rebirths) : null;
+  const rebirthStr = rebirths > 0 ? `♻️ Rebirth ${rebirths} (${rebirthReq.rarity})` : 'Nenhum (0)';
+  const titleStr = user.title ? ` ${user.title}` : '';
+  const highestLevel = Math.max(Number(user.highest_level || 1), user.level);
+  const highestMoney = Math.max(Number(user.highest_wallet || 0) + Number(user.highest_bank || 0), totalMoney);
+  const highestAura = Math.max(Number(user.highest_aura || 0), user.aura || 0);
+
   // Aura
   const auraPoints = user.aura || 0;
   const auraBuff = getAuraBuffs(auraPoints);
@@ -80,8 +77,9 @@ export async function handleRankCommand(sock, msg, sender, mentioned) {
   const text = `╔═════════════════════════╗\n` +
                ` 📇 *FICHA ÚNICA DO GUERREIRO RPG* 📇 \n` +
                `╚═════════════════════════╝\n\n` +
-               `👤 *Guerreiro:* @${target.split('@')[0]}\n` +
-               `💍 *Status Civil:* ${statusCivil}\n\n` +
+               `👤 *Guerreiro:* @${target.split('@')[0]}${titleStr}\n` +
+               `💍 *Status Civil:* ${statusCivil}\n` +
+               `♻️ *Rebirth Endgame:* ${rebirthStr}\n\n` +
                `🎖️ *CLASSE & PROGRESSÃO:*\n` +
                `• *Classe:* ${userStats.classInfo.name} (Tier ${userStats.classInfo.tier})\n` +
                `• *Nível RPG:* Nível ${user.level} (${progress}% pro próx. nível)\n` +
@@ -102,6 +100,10 @@ export async function handleRankCommand(sock, msg, sender, mentioned) {
                `• 🏦 *Banco:* $${user.bank.toLocaleString('pt-BR')}\n` +
                `• 💎 *Patrimônio Total:* $${totalMoney.toLocaleString('pt-BR')}\n` +
                `• 🎒 *Itens no Inventário:* ${inventoryCount} itens\n\n` +
+               `🏆 *PICOS HISTÓRICOS (GLÓRIA PERMANENTE):*\n` +
+               `• ⭐ *Maior Nível Atingido:* Nível ${highestLevel}\n` +
+               `• 💰 *Maior Patrimônio:* $${highestMoney.toLocaleString('pt-BR')}\n` +
+               `• ✨ *Maior Aura:* ${highestAura.toLocaleString('pt-BR')} pts\n\n` +
                `⚔️ *Lema do Guerreiro (IA):*\n` +
                `_"${heroMotto}"_`;
 

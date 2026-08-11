@@ -1,6 +1,7 @@
 import { getUser, updateUser } from '../database/sqlite.js';
 import { askAi } from '../utils/aiService.js';
 import { calculateBonusRewards, getUserStats, checkAndApplyLevelUp } from '../utils/bonusCalculator.js';
+import { getActiveUserMission, createMissionForUser, claimMissionRewardAtomic } from '../database/MissionRepository.js';
 
 export const RPG_CLASSES = {
   guerreiro: { name: '⚔️ Guerreiro de Aço', hp: 200, atk: 35, bonusMsg: 'Mais força (+25% moedas em combate, roubo, raid e missões)!' },
@@ -93,32 +94,49 @@ export async function handleRpgSystemCommands(sock, msg, command, args, sender) 
         return reply(`💀 *VOCÊ ESTÁ NOCAUTEADO (K.O.)!*\n\nSeu HP é 0/${userStats.maxHp}. Use \`/curar\` para descansar ou tome uma \`Poção de HP\` da loja antes de ir a uma missão!`);
       }
 
-      const quests = [
-        { title: '📜 Caça ao Dragão Vermelho', rewardMoney: 2500, rewardXp: 300 },
-        { title: '📜 Resgate do Amuleto Sagrado', rewardMoney: 1800, rewardXp: 200 },
-        { title: '📜 Defesa da Vila contra Goblins', rewardMoney: 1200, rewardXp: 150 },
-        { title: '📜 Exploração da Caverna de Cristal', rewardMoney: 3000, rewardXp: 400 }
-      ];
+      const active = getActiveUserMission(sender);
 
-      const quest = quests[Math.floor(Math.random() * quests.length)];
+      if (!active) {
+        const result = await createMissionForUser(sender, user.level);
+        if (!result.created && result.reason === 'COOLDOWN') {
+          const totalSec = Math.ceil(result.remainingMs / 1000);
+          const hours = Math.floor(totalSec / 3600);
+          const minutes = Math.floor((totalSec % 3600) / 60);
+          const seconds = totalSec % 60;
+          const timeStr = hours > 0 ? `${hours}h ${minutes}m ${seconds}s` : (minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`);
+          return reply(`⏳ *GUILDA EM DESCANSO!* 🏰\n\nNenhuma missão disponível no momento na categoria **${result.difficultyName}**.\n⏱️ *Tempo para a próxima missão:* *${timeStr}*`);
+        }
 
-      const { finalCoins, finalXp, bonusCoinsApplied, bonusXpApplied } = calculateBonusRewards(user, quest.rewardMoney, quest.rewardXp, 'quest');
+        const m = result.mission;
+        const text = `⚔️ *NOVA MISSÃO DA GUILDA DESIGNADA!* ⚔️\n\n` +
+                     `📜 *Missão:* ${m.title}\n` +
+                     `⭐ *Dificuldade:* ${m.difficulty_name}\n` +
+                     `💰 *Recompensa Estimada:* $${m.reward_money.toLocaleString('pt-BR')} moedas\n` +
+                     `✨ *XP Estimado:* ${m.reward_xp.toLocaleString('pt-BR')} XP\n\n` +
+                     `🎯 *Sua missão começou!* Digite \`/missao\` novamente para concluir e reivindicar as recompensas da guilda!`;
 
-      const newWallet = user.wallet + finalCoins;
-      const { newXp, newLevel, levelUpMsg } = checkAndApplyLevelUp(user, finalXp);
-      updateUser(sender, { wallet: newWallet, xp: newXp, level: newLevel });
+        return reply(text);
+      }
 
+      // Se já possui missão ativa, conclui atómicamente no banco
+      const claim = await claimMissionRewardAtomic(sender);
+      if (!claim.success) {
+        return reply('⚠️ Esta missão já foi concluída ou resgatada!');
+      }
+
+      const m = claim.mission;
       const sys = 'Você é um Mestre de Guilda RPG épico em um jogo de aventura medieval. Escreva 1 relato dinâmico de 20 palavras sobre o cumprimento da missão. Sem aspas.';
-      const prompt = `O guerreiro completou a missão "${quest.title}" usando suas habilidades.`;
+      const prompt = `O guerreiro completou a missão "${m.title}" (${m.difficulty_name}) usando suas habilidades.`;
       const aiStory = await getAiNarrative(prompt, sys) || 'Vitória épica conquistada nas profundezas da masmorra!';
 
-      const bonusCoinsStr = bonusCoinsApplied > 0 ? ` *(+$${bonusCoinsApplied.toLocaleString('pt-BR')} bônus)*` : '';
-      const bonusXpStr = bonusXpApplied > 0 ? ` *(+${bonusXpApplied} XP bônus)*` : '';
+      const bonusCoinsStr = claim.bonusCoinsApplied > 0 ? ` *(+$${claim.bonusCoinsApplied.toLocaleString('pt-BR')} bônus)*` : '';
+      const bonusXpStr = claim.bonusXpApplied > 0 ? ` *(+${claim.bonusXpApplied} XP bônus)*` : '';
 
       const text = `⚔️ *MISSÃO CUMPRIDA PELA GUILDA!* ⚔️\n\n` +
-                   `📜 *Missão:* ${quest.title}\n` +
-                   `💰 *Recompensa:* +$${finalCoins.toLocaleString('pt-BR')} moedas${bonusCoinsStr}\n` +
-                   `✨ *XP Adquirido:* +${finalXp} XP${bonusXpStr}${levelUpMsg}\n\n` +
+                   `📜 *Missão:* ${m.title}\n` +
+                   `⭐ *Dificuldade:* ${m.difficulty_name}\n` +
+                   `💰 *Recompensa Final:* +$${claim.finalCoins.toLocaleString('pt-BR')} moedas${bonusCoinsStr}\n` +
+                   `✨ *XP Adquirido:* +${claim.finalXp} XP${bonusXpStr}${claim.levelUpMsg}\n\n` +
                    `📖 *Relato do Mestre da Guilda (IA):*\n_"${aiStory}"_`;
 
       return reply(text);

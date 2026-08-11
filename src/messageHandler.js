@@ -30,6 +30,7 @@ import { handleWarnCommand } from './commands/admin_extra/warn.js';
 import { handleWarningsCommand } from './commands/admin_extra/warnings.js';
 
 import { handleBirthdayCommands, handleAniversariantesCommand } from './commands/birthday.js';
+import { handleRebirthCommand, handleTopRebirthCommand } from './commands/rebirth.js';
 
 import { handleShipCommand } from './commands/fun/ship.js';
 import { handleEightBallCommand } from './commands/fun/eightball.js';
@@ -675,6 +676,13 @@ export async function handleMessages(rawSock, msg) {
     }
     else if (['aniversariantes', 'aniversarios', 'proximosaniversarios'].includes(command)) {
       await handleAniversariantesCommand(sock, msg);
+    }
+    // ♻️ Sistema Rebirth Endgame
+    else if (['rebirth', 'renascer', 'renascimento'].includes(command)) {
+      await handleRebirthCommand(sock, msg, command, args, sender);
+    }
+    else if (['toprebirth', 'toprebirths', 'rankingrebirth'].includes(command)) {
+      await handleTopRebirthCommand(sock, msg);
     }
     else if (command === 'tts') await queueManager.enqueueHeavyCommand(from, command, () => handleTtsCommand(sock, msg, args));
     else if (command === 'ocr') await queueManager.enqueueHeavyCommand(from, command, () => handleOcrCommand(sock, msg));

@@ -12,7 +12,9 @@ const BACKUPS_DIR = path.resolve('backups');
 const KNOWN_USER_KEYS = [
   'jid', 'wallet', 'bank', 'xp', 'level', 'aura',
   'last_daily', 'last_work', 'last_aura_farm', 'last_pescar', 'daily_streak',
-  'inventory', 'extra_data', 'created_at', 'updated_at'
+  'inventory', 'extra_data', 'created_at', 'updated_at',
+  'rebirths', 'highest_level', 'highest_wallet', 'highest_bank', 'highest_aura',
+  'total_xp_earned', 'total_money_earned', 'title'
 ];
 
 const CURRENT_SCHEMA_VERSION = 2;
@@ -224,6 +226,32 @@ class DatabaseManager {
             chat_jid TEXT DEFAULT '',
             created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );`,
+
+          `CREATE TABLE IF NOT EXISTS user_missions (
+            id BIGSERIAL PRIMARY KEY,
+            user_jid TEXT NOT NULL,
+            mission_id TEXT NOT NULL,
+            difficulty TEXT NOT NULL,
+            title TEXT NOT NULL,
+            reward_money BIGINT DEFAULT 0,
+            reward_xp BIGINT DEFAULT 0,
+            status TEXT DEFAULT 'active',
+            reward_claimed INTEGER DEFAULT 0,
+            started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            completed_at TIMESTAMP WITH TIME ZONE
+          );`,
+
+          `CREATE TABLE IF NOT EXISTS rebirth_history (
+            id BIGSERIAL PRIMARY KEY,
+            user_jid TEXT NOT NULL,
+            rebirth_level INTEGER NOT NULL,
+            sacrificed_wallet BIGINT DEFAULT 0,
+            sacrificed_bank BIGINT DEFAULT 0,
+            sacrificed_xp BIGINT DEFAULT 0,
+            sacrificed_aura BIGINT DEFAULT 0,
+            sacrificed_level INTEGER DEFAULT 1,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
           );`
         ]
       : [
@@ -299,6 +327,32 @@ class DatabaseManager {
             chat_jid TEXT DEFAULT '',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );`,
+
+          `CREATE TABLE IF NOT EXISTS user_missions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_jid TEXT NOT NULL,
+            mission_id TEXT NOT NULL,
+            difficulty TEXT NOT NULL,
+            title TEXT NOT NULL,
+            reward_money INTEGER DEFAULT 0,
+            reward_xp INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'active',
+            reward_claimed INTEGER DEFAULT 0,
+            started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            completed_at DATETIME
+          );`,
+
+          `CREATE TABLE IF NOT EXISTS rebirth_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_jid TEXT NOT NULL,
+            rebirth_level INTEGER NOT NULL,
+            sacrificed_wallet INTEGER DEFAULT 0,
+            sacrificed_bank INTEGER DEFAULT 0,
+            sacrificed_xp INTEGER DEFAULT 0,
+            sacrificed_aura INTEGER DEFAULT 0,
+            sacrificed_level INTEGER DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
           );`
         ];
 
@@ -318,7 +372,15 @@ class DatabaseManager {
       const pgAlters = [
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();',
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();',
-        'ALTER TABLE users ADD COLUMN IF NOT EXISTS last_pescar BIGINT DEFAULT 0;'
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS last_pescar BIGINT DEFAULT 0;',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS rebirths INTEGER DEFAULT 0;',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS highest_level INTEGER DEFAULT 1;',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS highest_wallet BIGINT DEFAULT 0;',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS highest_bank BIGINT DEFAULT 0;',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS highest_aura BIGINT DEFAULT 0;',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS total_xp_earned BIGINT DEFAULT 0;',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS total_money_earned BIGINT DEFAULT 0;',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS title TEXT DEFAULT \'\';'
       ];
       for (const alt of pgAlters) {
         try { await this.pgClient.query(alt); } catch (_) {}
@@ -330,6 +392,14 @@ class DatabaseManager {
         'ALTER TABLE users ADD COLUMN last_pescar INTEGER DEFAULT 0',
         'ALTER TABLE users ADD COLUMN daily_streak INTEGER DEFAULT 0',
         'ALTER TABLE users ADD COLUMN extra_data TEXT DEFAULT "{}"',
+        'ALTER TABLE users ADD COLUMN rebirths INTEGER DEFAULT 0',
+        'ALTER TABLE users ADD COLUMN highest_level INTEGER DEFAULT 1',
+        'ALTER TABLE users ADD COLUMN highest_wallet INTEGER DEFAULT 0',
+        'ALTER TABLE users ADD COLUMN highest_bank INTEGER DEFAULT 0',
+        'ALTER TABLE users ADD COLUMN highest_aura INTEGER DEFAULT 0',
+        'ALTER TABLE users ADD COLUMN total_xp_earned INTEGER DEFAULT 0',
+        'ALTER TABLE users ADD COLUMN total_money_earned INTEGER DEFAULT 0',
+        'ALTER TABLE users ADD COLUMN title TEXT DEFAULT ""',
         'ALTER TABLE group_configs ADD COLUMN anti_delete INTEGER DEFAULT 0'
       ];
       for (const alt of alters) {
@@ -949,6 +1019,14 @@ class DatabaseManager {
     u.last_pescar = Number(u.last_pescar) || 0;
     u.daily_streak = Number(u.daily_streak) || 0;
     u.inventory = u.inventory || '[]';
+    u.rebirths = Number(u.rebirths) || 0;
+    u.highest_level = Number(u.highest_level) || Math.max(1, u.level);
+    u.highest_wallet = Number(u.highest_wallet) || Math.max(0, u.wallet);
+    u.highest_bank = Number(u.highest_bank) || Math.max(0, u.bank);
+    u.highest_aura = Number(u.highest_aura) || Math.max(0, u.aura);
+    u.total_xp_earned = Number(u.total_xp_earned) || Math.max(0, u.xp);
+    u.total_money_earned = Number(u.total_money_earned) || Math.max(0, u.wallet + u.bank);
+    u.title = u.title || '';
 
     // Garante propriedades do extra_data no objeto principal
     const extra = this.parseExtraData(u.extra_data);

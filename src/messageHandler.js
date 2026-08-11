@@ -532,10 +532,16 @@ export async function handleMessages(rawSock, msg) {
                        `「 🥇 」/prestigio — subir nível de prestígio supremo\n` +
                        `「 🏅 」/conquistas — conquistas desbloqueadas\n` +
                        `「 🖼️ 」/avatar — personalizar avatar de perfil\n\n` +
-                       `💎 *LOJA VIP & EVENTOS*\n` +
-                       `「 👑 」/vip (ou /lojavip) — loja de benefícios VIP\n` +
-                       `「 🎉 」/evento — eventos sazonais ativos no bot\n` +
-                       `「 ⏳ 」/fila — estatísticas de processamento do bot\n\n` +
+                        `💎 *LOJA VIP & EVENTOS*\n` +
+                        `「 👑 」/vip (ou /lojavip) — loja de benefícios VIP\n` +
+                        `「 🎉 」/evento — eventos sazonais ativos no bot\n` +
+                        `「 ⏳ 」/fila — estatísticas de processamento do bot\n\n` +
+                        `♻️ *SISTEMA REBIRTH ENDGAME*\n` +
+                        `「 ♻️ 」/rebirth — renascer com reset parcial, bônus permanentes (+5%/nível) e conquistas de elite\n` +
+                        `「 🏆 」/toprebirth — hall da fama dos maiores renascidos do bot\n\n` +
+                        `🎂 *SISTEMA DE ANIVERSÁRIOS*\n` +
+                        `「 🎂 」/aniversario [DD/MM/AAAA] — cadastrar, consultar ou alterar data de aniversário\n` +
+                        `「 🎉 」/aniversariantes — listar aniversariantes de hoje e dos próximos dias\n\n` +
                        `👑 *ADMINISTRAÇÃO DA ECONOMIA (DONO)*\n` +
                        `「 💵 」/givesaldo - dar saldo ao usuário\n` +
                        `「 💸 」/removesaldo - remover saldo do usuário\n` +

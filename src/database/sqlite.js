@@ -9,6 +9,10 @@ export function getStore() {
   return databaseManager.getDatabase();
 }
 
+export function getDatabase() {
+  return databaseManager.getDatabase();
+}
+
 export async function saveStore() {
   await databaseManager.saveDatabase();
 }

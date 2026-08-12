@@ -468,6 +468,24 @@ export async function handleMessages(rawSock, msg) {
                        `「 📤 」/sacar — retirar moedas do banco\n` +
                        `「 🏠 」/imoveis (ou /casas) — comprar e gerenciar imóveis\n` +
                        `「 🐶 」/pet (ou /pets) — adotar e cuidar do seu mascote\n\n` +
+                       `👑 *SISTEMA COMPLETO DE REINOS & GUERRAS*\n` +
+                       `「 🏰 」/reino comprar <nome> — fundar seu reino próprio\n` +
+                       `「 📊 」/reino — painel imperial e status do reino\n` +
+                       `「 🏗️ 」/reino construir — evoluir centro, casas, fazendas, minas, muralhas\n` +
+                       `「 👥 」/reino recrutar <qtd> — aumentar população por recrutamento\n` +
+                       `「 🧑‍🌾 」/reino trabalhadores — alocar agricultores, mineradores, comerciantes\n` +
+                       `「 🌾 」/reino coletar — colheita de comida, recursos e ouro com eventos\n` +
+                       `「 📜 」/reino imposto <1-100> — definir impostos e satisfação da população\n` +
+                       `「 💰 」/reino sacar <valor> — retirar dinheiro do tesouro para carteira\n` +
+                       `「 🎖️ 」/reino especializar — escolher via estratégica (Militar, Comercial...)\n` +
+                       `「 ⚔️ 」/reino treinar <qtd> — treinar soldados do exército\n` +
+                       `「 🗡️ 」/reino equipamentos — evoluir armamentos e armaduras\n` +
+                       `「 🪖 」/reino general — contratar generais com bônus militares\n` +
+                       `「 ⚔️ 」/guerra @rei — declarar guerra e conquistar reinos inimigos\n` +
+                       `「 🚩 」/reino conquistados — ver impérios e domínios anexados\n` +
+                       `「 🤝 」/alianca @rei — firmar pacto diplomático e suporte defensivo\n` +
+                       `「 💍 」/casamentoreal @rei — casamento real com bônus de impostos\n` +
+                       `「 🏆 」/reinorank — ranking global dos maiores impérios\n\n` +
                        `⚔️ *SISTEMA RPG & RAIDS*\n` +
                        `「 🛡️ 」/classe — escolher sua classe (Guerreiro, Mago, Arqueiro)\n` +
                        `「 📜 」/missao — cumprir missões diárias com prêmios\n` +
@@ -703,7 +721,7 @@ export async function handleMessages(rawSock, msg) {
       await handleBankMarketCommands(sock, msg, command, args, sender);
     }
     // 👑 Sistema de Monarquia, Reinos, Guerras & Alianças
-    else if (['reino', 'reinos', 'guerra', 'guerras', 'lojareino', 'reinoloja', 'alianca', 'aliança'].includes(command)) {
+    else if (['reino', 'reinos', 'guerra', 'guerras', 'lojareino', 'reinoloja', 'alianca', 'aliança', 'reinorank', 'rankingreino', 'casamentoreal'].includes(command)) {
       await handleKingdomCommands(sock, msg, command, args, sender);
     }
     // 🎰 Minigames & Cassino com IA

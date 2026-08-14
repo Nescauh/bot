@@ -19,19 +19,32 @@ export async function askAiChat(messages, options = {}) {
     throw new Error('Array de mensagens vazio para askAiChat.');
   }
 
-  // 1. Prioridade Máxima: Groq API (LLaMA 3.3 70B & LLaMA 3.1 8B)
+  // Helper para limpar tags de pensamento <think>...</think> ou incompletas
+  const cleanThinkingTags = (text) => {
+    if (!text) return '';
+    return text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim();
+  };
+
+  // 1. Prioridade Máxima: Groq API (Qwen 3.6 27B, LLaMA 3.3 70B & LLaMA 3.1 8B)
   if (apiKey.startsWith('gsk_')) {
-    const groqModels = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+    const groqModels = ['qwen/qwen3.6-27b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
     for (const model of groqModels) {
       try {
+        const payload = {
+          model,
+          messages,
+          temperature: options.temperature !== undefined ? options.temperature : 0.6,
+          max_completion_tokens: options.max_tokens || 1500
+        };
+
+        // Para modelos Qwen / raciocínio na Groq, oculta o bloco de pensamento para economizar tokens
+        if (model.includes('qwen')) {
+          payload.reasoning_format = 'hidden';
+        }
+
         const res = await axios.post(
           'https://api.groq.com/openai/v1/chat/completions',
-          {
-            model,
-            messages,
-            temperature: options.temperature || 0.7,
-            max_tokens: options.max_tokens || 800
-          },
+          payload,
           {
             headers: {
               'Authorization': `Bearer ${apiKey}`,
@@ -41,9 +54,10 @@ export async function askAiChat(messages, options = {}) {
           }
         );
 
-        const content = res.data?.choices?.[0]?.message?.content;
+        let content = res.data?.choices?.[0]?.message?.content;
         if (content && content.trim()) {
-          return content.trim();
+          content = cleanThinkingTags(content);
+          if (content) return content;
         }
       } catch (err) {
         console.warn(`⚠️ Groq API modelo ${model} falhou (${err.response?.data?.error?.message || err.message}). Tentando próximo modelo...`);
@@ -70,9 +84,9 @@ export async function askAiChat(messages, options = {}) {
         }
       );
 
-      const content = res.data?.choices?.[0]?.message?.content;
+      let content = res.data?.choices?.[0]?.message?.content;
       if (content && content.trim()) {
-        return content.trim();
+        return cleanThinkingTags(content);
       }
     } catch (err) {
       console.warn('⚠️ OpenAI API falhou. Tentando OpenRouter/Fallback...', err.message);
@@ -97,9 +111,9 @@ export async function askAiChat(messages, options = {}) {
         }
       );
 
-      const content = res.data?.choices?.[0]?.message?.content;
+      let content = res.data?.choices?.[0]?.message?.content;
       if (content && content.trim()) {
-        return content.trim();
+        return cleanThinkingTags(content);
       }
     } catch (err) {
       console.warn('⚠️ OpenRouter API falhou:', err.message);
@@ -107,28 +121,39 @@ export async function askAiChat(messages, options = {}) {
   }
 
   // 4. Fallback final via Groq Fallback Key
-  try {
-    const res = await axios.post(
-      'https://api.groq.com/openai/v1/chat/completions',
-      {
-        model: 'llama-3.3-70b-versatile',
-        messages
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${FALLBACK_GROQ_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 15000
+  const fallbackModels = ['qwen/qwen3.6-27b', 'llama-3.3-70b-versatile'];
+  for (const model of fallbackModels) {
+    try {
+      const payload = {
+        model,
+        messages,
+        temperature: options.temperature !== undefined ? options.temperature : 0.6,
+        max_completion_tokens: options.max_tokens || 1500
+      };
+      if (model.includes('qwen')) {
+        payload.reasoning_format = 'hidden';
       }
-    );
 
-    const content = res.data?.choices?.[0]?.message?.content;
-    if (content && content.trim()) {
-      return content.trim();
+      const res = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        payload,
+        {
+          headers: {
+            'Authorization': `Bearer ${FALLBACK_GROQ_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 15000
+        }
+      );
+
+      let content = res.data?.choices?.[0]?.message?.content;
+      if (content && content.trim()) {
+        content = cleanThinkingTags(content);
+        if (content) return content;
+      }
+    } catch (err) {
+      console.warn(`⚠️ Groq Fallback modelo ${model} falhou:`, err.message);
     }
-  } catch (err) {
-    console.error('❌ Todas as APIs de IA falharam:', err.message);
   }
 
   throw new Error('Não foi possível obter resposta da Inteligência Artificial no momento.');

@@ -4,7 +4,7 @@
  */
 
 class ConversationMemory {
-  constructor(limit = 25) {
+  constructor(limit = 30) {
     this.limit = limit;
     // Estrutura: { [chatJid]: Array<MessageEntry> }
     this.memory = new Map();
@@ -45,6 +45,50 @@ class ConversationMemory {
     if (history.length > this.limit) {
       history.shift();
     }
+  }
+
+  /**
+   * Obtém o histórico no formato multi-turn ideal para APIs de LLM
+   * [ { role: 'system', content: ... }, { role: 'user', content: ... }, { role: 'assistant', content: ... }, ... ]
+   * @param {string} chatJid JID da conversa
+   * @param {string} systemInstruction Instrução de sistema
+   * @param {string} currentPrompt Prompt da mensagem atual
+   * @param {number} maxTurns Máximo de mensagens anteriores
+   * @returns {Array<{role: string, content: string}>}
+   */
+  getMultiTurnMessages(chatJid, systemInstruction, currentPrompt, maxTurns = 12) {
+    const rawHistory = this.memory.get(chatJid) || [];
+    const recent = rawHistory.slice(-maxTurns);
+
+    const messages = [
+      { role: 'system', content: systemInstruction }
+    ];
+
+    for (const msg of recent) {
+      if (msg.isBot) {
+        messages.push({
+          role: 'assistant',
+          content: msg.text
+        });
+      } else {
+        // Se for grupo, inclui o nome de quem falou
+        const prefix = chatJid.endsWith('@g.us') ? `[${msg.senderName}]: ` : '';
+        messages.push({
+          role: 'user',
+          content: `${prefix}${msg.text}`
+        });
+      }
+    }
+
+    // Adiciona a mensagem atual se não for repetida
+    if (currentPrompt && (messages.length === 1 || messages[messages.length - 1].content !== currentPrompt)) {
+      messages.push({
+        role: 'user',
+        content: currentPrompt
+      });
+    }
+
+    return messages;
   }
 
   /**

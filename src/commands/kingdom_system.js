@@ -218,8 +218,16 @@ export async function handleKingdomCommands(sock, msg, command, args, sender, me
       return renderKingdomMainPanel(reply, sender, kd);
     }
 
+    const RESOURCE_KEYS = ['comida', 'food', 'madeira', 'wood', 'pedra', 'stone', 'ferro', 'iron'];
+
     switch (subCommand) {
       case 'comprar':
+        // Se o usuário já for monarca e estiver tentando comprar um recurso (ex: /reino comprar ferro 50)
+        if (kd.isMonarch && RESOURCE_KEYS.includes(args[1]?.toLowerCase())) {
+          return handleResourceMarket(reply, sender, user, kd, ['comprar', args[1], args[2]]);
+        }
+        return handleBuyKingdom(reply, sender, user, kd, args);
+
       case 'criar':
       case 'fundar':
         return handleBuyKingdom(reply, sender, user, kd, args);
@@ -236,12 +244,21 @@ export async function handleKingdomCommands(sock, msg, command, args, sender, me
         return handleRecruitPopulation(reply, sender, user, kd, args);
 
       case 'trabalhadores':
+      case 'trabalhador':
       case 'trabalhar':
+      case 'repartir':
+      case 'balancear':
+      case 'equilibrar':
+      case 'dividir':
+      case 'distribuir':
+      case 'definir':
+      case 'resetar':
         return handleManageWorkers(reply, sender, user, kd, args);
 
       case 'coletar':
       case 'guilda':
       case 'recursos':
+      case 'colheita':
         return handleCollectResources(reply, sender, user, kd);
 
       case 'imposto':
@@ -270,6 +287,7 @@ export async function handleKingdomCommands(sock, msg, command, args, sender, me
       case 'generais':
         return handleGenerals(reply, sender, user, kd, args);
 
+      case 'mercado':
       case 'comercio':
       case 'vender':
       case 'comprarrecurso':
@@ -326,34 +344,40 @@ function renderKingdomMainPanel(reply, sender, kd) {
 
   const availableWithdrawal = Math.max(0, limits.dailyWithdrawalLimit - k.daily_withdrawal_today);
 
+  const w = k.workers || {};
+  const allocatedWorkers = (w.farmer || 0) + (w.lumberjack || 0) + (w.miner || 0) + (w.merchant || 0);
+  const freePopulation = Math.max(0, (k.population || 0) - allocatedWorkers);
+
   const text = `🏰 *PAINEL IMPERIAL DO REINO DE NOBREZA* 👑\n\n` +
                `👑 *Monarca Soberano:* @${sender.split('@')[0]}\n` +
                `🏰 *Nome do Reino:* **${k.name}**\n` +
                `🏆 *Nível do Reino:* Nível ${k.level} (${k.xp} XP) | *Reputação:* ⭐ ${rep}\n` +
                `📜 *Especialização:* **${specStr}**\n\n` +
                `👥 *POPULAÇÃO & SATISFAÇÃO:*\n` +
-               `• 👨‍👩‍👧‍👦 *Habitantes:* ${k.population} / ${limits.maxPopulation} max\n` +
+               `• 👨‍👩‍👧‍👦 *Habitantes:* ${k.population} / ${limits.maxPopulation} max (🆓 ${freePopulation} livres)\n` +
                `• 😊 *Satisfação Popular:* ${k.satisfaction}% | *Impostos:* ${k.tax_rate}%\n` +
-               `• 🧑‍🌾 *Trabalhadores Alocados:* ${k.workers.farmer} Agr, ${k.workers.lumberjack} Lenh, ${k.workers.miner} Min, ${k.workers.merchant} Com\n\n` +
+               `• 🧑‍🌾 *Trabalhadores Alocados:* ${w.farmer || 0} Agr, ${w.lumberjack || 0} Lenh, ${w.miner || 0} Min, ${w.merchant || 0} Com\n\n` +
                `🌾 *ARMAZÉM DE RECURSOS:*\n` +
-               `• 🍞 Comida: ${k.resources.food} | 🪵 Madeira: ${k.resources.wood}\n` +
-               `• 🪨 Pedra: ${k.resources.stone} | ⚙️ Ferro: ${k.resources.iron}\n\n` +
+               `• 🍞 Comida: ${k.resources.food || 0} | 🪵 Madeira: ${k.resources.wood || 0}\n` +
+               `• 🪨 Pedra: ${k.resources.stone || 0} | ⚙️ Ferro: ${k.resources.iron || 0}\n\n` +
                `💰 *TESOURO REAL DO REINO:*\n` +
-               `• 🪙 *Cofre do Reino:* **$${k.treasury.toLocaleString('pt-BR')}**\n` +
+               `• 🪙 *Cofre do Reino:* **$${(k.treasury || 0).toLocaleString('pt-BR')}**\n` +
                `• 💵 *Disponível p/ Saque Hoje:* $${availableWithdrawal.toLocaleString('pt-BR')} / $${limits.dailyWithdrawalLimit.toLocaleString('pt-BR')}\n\n` +
                `⚔️ *FORÇA MILITAR & DEFESA:*\n` +
-               `• 🗡️ *Soldados:* ${k.army.soldiers} / ${limits.maxArmy} max (Equip Lvl ${k.army.equipment_level})\n` +
+               `• 🗡️ *Soldados:* ${k.army.soldiers || 0} / ${limits.maxArmy} max (Equip Lvl ${k.army.equipment_level || 1})\n` +
                `• ⚔️ *Poder de Ataque:* ${atkPower} | 🛡️ *Poder Defensivo:* ${defPower}\n` +
-               `• 🪖 *Generais:* ${k.army.generals.length > 0 ? k.army.generals.join(', ') : 'Nenhum'}\n\n` +
+               `• 🪖 *Generais:* ${k.army.generals?.length > 0 ? k.army.generals.join(', ') : 'Nenhum'}\n\n` +
                `🤝 *DIPLOMACIA:*\n` +
                `• 🕊️ *Aliança:* ${allyStr}\n` +
                `• 💍 *Casamento Real:* ${marriageStr}\n` +
-               `• 🚩 *Reinos Conquistados:* ${k.conquered_kingdoms.length}\n\n` +
+               `• 🚩 *Reinos Conquistados:* ${k.conquered_kingdoms?.length || 0}\n\n` +
                `💡 *Principais Comandos:*\n` +
-               `• \`/reino coletar\` ➔ Coletar recursos e ouro produzidos\n` +
+               `• \`/reino coletar\` ➔ Coletar colheita, ferro, madeira e ouro\n` +
+               `• \`/reino trabalhadores repartir\` ➔ Repartir população de forma equilibrada\n` +
+               `• \`/reino trabalhadores\` ➔ Painel completo de gestão de cargos\n` +
+               `• \`/reino comprar ferro <qtd>\` ➔ Comprar ferro e matérias no Mercado\n` +
                `• \`/reino construir\` ➔ Menu de evolução de estruturas\n` +
                `• \`/reino recrutar <qtd>\` ➔ Aumentar população\n` +
-               `• \`/reino trabalhadores\` ➔ Alocar tarefas da população\n` +
                `• \`/reino treinar <qtd>\` ➔ Formar soldados\n` +
                `• \`/reino sacar <valor>\` ➔ Transferir ouro para carteira\n` +
                `• \`/guerra @rei\` ➔ Iniciar guerra de conquista`;
@@ -530,63 +554,239 @@ function handleRecruitPopulation(reply, sender, user, kd, args) {
   k.treasury -= totalMoney;
   k.resources.food -= totalFood;
   k.population += amount;
-  k.workers.farmer += Math.floor(amount / 2); // Aloca metade como agricultores automaticamente
-  k.workers.lumberjack += Math.ceil(amount / 2);
 
+  // Novos habitantes chegam como cidadãos livres para livre alocação do monarca
   updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
 
-  return reply(`👨‍👩‍👧‍👦 *RECRUTAMENTO REALIZADO!* 👑\n\n` +
-               `Você recrutou **+${amount} habitantes** para o reino!\n` +
+  const w = k.workers || {};
+  const allocated = (w.farmer || 0) + (w.lumberjack || 0) + (w.miner || 0) + (w.merchant || 0);
+  const freePop = Math.max(0, k.population - allocated);
+
+  return reply(`👨‍👩‍👧‍👦 *RECRUTAMENTO REALIZADO COM SUCESSO!* 👑\n\n` +
+               `Você recrutou **+${amount} novos habitantes** para o reino!\n` +
                `👥 *População Total:* ${k.population} / ${limits.maxPopulation}\n` +
-               `💸 *Custo:* $${totalMoney.toLocaleString('pt-BR')} Ouro e 🍞 ${totalFood} Comida.`);
+               `🆓 *Cidadãos Livres Disponíveis:* **${freePop} habitantes**\n` +
+               `💸 *Custo Pago:* $${totalMoney.toLocaleString('pt-BR')} Ouro e 🍞 ${totalFood} Comida.\n\n` +
+               `💡 *Dica de Gestão:*\n` +
+               `• Use \`/reino trabalhadores repartir\` para equilibrar todos os cargos de forma justa!\n` +
+               `• Ou use \`/reino trabalhadores\` para gerenciar cada profissão individualmente.`);
 }
 
-// 6. Alocação de Trabalhadores
+// 6. Alocação e Gestão de Trabalhadores
 function handleManageWorkers(reply, sender, user, kd, args) {
   if (!kd.isMonarch) return reply('⚠️ Apenas monarcas podem gerenciar trabalhadores.');
 
   const k = kd.kingdom;
-  const job = args[1]?.toLowerCase();
-  const count = parseInt(args[2]);
+  if (!k.workers) {
+    k.workers = { farmer: 0, lumberjack: 0, miner: 0, merchant: 0, soldier: 0 };
+  }
 
+  const sub = args[0]?.toLowerCase() === 'trabalhadores' || args[0]?.toLowerCase() === 'trabalhador' || args[0]?.toLowerCase() === 'trabalhar'
+    ? args[1]?.toLowerCase()
+    : args[0]?.toLowerCase();
+
+  // 1. AÇÃO: REPARTIR / BALANCEAR IGUALMENTE ENTRE AS 4 PROFISSÕES
+  if (['repartir', 'balancear', 'equilibrar', 'auto', 'justo', 'dividir', 'distribuir'].includes(sub)) {
+    const pop = k.population || 0;
+    if (pop <= 0) {
+      return reply('⚠️ Seu reino ainda não possui habitantes para trabalhar.');
+    }
+
+    const baseCount = Math.floor(pop / 4);
+    const remainder = pop % 4;
+
+    k.workers.farmer = baseCount + (remainder >= 1 ? 1 : 0);
+    k.workers.lumberjack = baseCount + (remainder >= 2 ? 1 : 0);
+    k.workers.miner = baseCount + (remainder >= 3 ? 1 : 0);
+    k.workers.merchant = baseCount;
+    k.workers.soldier = 0;
+
+    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+
+    return reply(`⚖️ *TRABALHADORES REPARTIDOS COM JUSTIÇA & EQUILÍBRIO!* 👑\n\n` +
+                 `Toda a população de **${pop} habitantes** foi repartida harmoniosamente entre as tarefas do reino:\n\n` +
+                 `• 🌾 *Agricultores:* **${k.workers.farmer}** ➔ Produção contínua de Comida\n` +
+                 `• 🪵 *Lenhadores:* **${k.workers.lumberjack}** ➔ Extração constante de Madeira\n` +
+                 `• ⛏️ *Mineradores:* **${k.workers.miner}** ➔ Extração de Pedra e Ferro Puro\n` +
+                 `• 🪙 *Comerciantes:* **${k.workers.merchant}** ➔ Geração de Ouro no Tesouro Real\n\n` +
+                 `👥 *Total Alocado:* ${pop} / ${pop} (🆓 0 livres)\n` +
+                 `💡 Utilize \`/reino coletar\` para recolher a nova produção!`);
+  }
+
+  // 2. AÇÃO: RESETAR / DESALOCAR TRABALHADORES
+  if (['resetar', 'zerar', 'limpar', 'desalocar', 'reset'].includes(sub)) {
+    k.workers.farmer = 0;
+    k.workers.lumberjack = 0;
+    k.workers.miner = 0;
+    k.workers.merchant = 0;
+    k.workers.soldier = 0;
+
+    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+
+    return reply(`🔄 *TODOS OS TRABALHADORES FORAM DESALOCADOS!* 👑\n\n` +
+                 `Agora todos os **${k.population} habitantes** estão livres para novas tarefas.\n\n` +
+                 `💡 *Como alocar:*\n` +
+                 `• \`/reino trabalhadores repartir\` ➔ Divide igualmente (25% cada)\n` +
+                 `• \`/reino trabalhadores definir <agr> <lenh> <min> <com>\` ➔ Define tudo de uma vez\n` +
+                 `• \`/reino trabalhadores <profissao> <qtd>\` ➔ Aloca individualmente`);
+  }
+
+  // 3. AÇÃO: DEFINIR 4 PROFISSÕES DE UMA VEZ
+  // Exemplo: /reino trabalhadores definir 20 20 20 20 OU /reino trabalhadores 20 20 20 20
+  let isBulk = false;
+  let bulkAgr = 0, bulkLenh = 0, bulkMin = 0, bulkCom = 0;
+
+  if (sub === 'definir' && args.length >= 6) {
+    bulkAgr = parseInt(args[2]);
+    bulkLenh = parseInt(args[3]);
+    bulkMin = parseInt(args[4]);
+    bulkCom = parseInt(args[5]);
+    isBulk = true;
+  } else if (!isNaN(parseInt(args[1])) && !isNaN(parseInt(args[2])) && !isNaN(parseInt(args[3])) && !isNaN(parseInt(args[4]))) {
+    bulkAgr = parseInt(args[1]);
+    bulkLenh = parseInt(args[2]);
+    bulkMin = parseInt(args[3]);
+    bulkCom = parseInt(args[4]);
+    isBulk = true;
+  } else if (args[0] === 'definir' && args.length >= 5) {
+    bulkAgr = parseInt(args[1]);
+    bulkLenh = parseInt(args[2]);
+    bulkMin = parseInt(args[3]);
+    bulkCom = parseInt(args[4]);
+    isBulk = true;
+  }
+
+  if (isBulk) {
+    if (isNaN(bulkAgr) || bulkAgr < 0 || isNaN(bulkLenh) || bulkLenh < 0 ||
+        isNaN(bulkMin) || bulkMin < 0 || isNaN(bulkCom) || bulkCom < 0) {
+      return reply('⚠️ Os valores devem ser números inteiros maiores ou iguais a zero.\nExemplo: `/reino trabalhadores definir 25 25 25 25`');
+    }
+
+    const totalBulk = bulkAgr + bulkLenh + bulkMin + bulkCom;
+    if (totalBulk > k.population) {
+      return reply(`⚠️ A soma dos trabalhadores (**${totalBulk}**) ultrapassa a população atual (**${k.population} habitantes**)!`);
+    }
+
+    k.workers.farmer = bulkAgr;
+    k.workers.lumberjack = bulkLenh;
+    k.workers.miner = bulkMin;
+    k.workers.merchant = bulkCom;
+    k.workers.soldier = 0;
+
+    const freePop = k.population - totalBulk;
+    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+
+    return reply(`✅ *DISTRIBUIÇÃO DE TRABALHADORES ATUALIZADA!* 👑\n\n` +
+                 `📊 *Nova Alocação:*\n` +
+                 `• 🌾 *Agricultores:* ${bulkAgr}\n` +
+                 `• 🪵 *Lenhadores:* ${bulkLenh}\n` +
+                 `• ⛏️ *Mineradores:* ${bulkMin}\n` +
+                 `• 🪙 *Comerciantes:* ${bulkCom}\n\n` +
+                 `👥 *Total Alocado:* ${totalBulk} / ${k.population} (🆓 ${freePop} cidadãos livres)`);
+  }
+
+  // 4. AÇÃO: ALOCAÇÃO INDIVIDUAL POR PROFISSÃO
   const JOBS = {
     agricultor: 'farmer',
+    agricultores: 'farmer',
     fazendeiro: 'farmer',
+    fazenda: 'farmer',
+    comida: 'farmer',
+    agr: 'farmer',
+    farmer: 'farmer',
+
     lenhador: 'lumberjack',
+    lenhadores: 'lumberjack',
+    madeira: 'lumberjack',
+    lenha: 'lumberjack',
+    lenh: 'lumberjack',
+    lumberjack: 'lumberjack',
+
     minerador: 'miner',
-    comerciante: 'merchant'
+    mineradores: 'miner',
+    minero: 'miner',
+    pedra: 'miner',
+    ferro: 'miner',
+    mina: 'miner',
+    min: 'miner',
+    miner: 'miner',
+
+    comerciante: 'merchant',
+    comerciantes: 'merchant',
+    comercio: 'merchant',
+    comércio: 'merchant',
+    ouro: 'merchant',
+    com: 'merchant',
+    merchant: 'merchant'
   };
 
-  if (!job || !JOBS[job] || isNaN(count) || count < 0) {
-    const w = k.workers;
-    const totalWorkers = (w.farmer || 0) + (w.lumberjack || 0) + (w.miner || 0) + (w.merchant || 0);
+  const jobParam = (args[0]?.toLowerCase() === 'trabalhadores' || args[0]?.toLowerCase() === 'trabalhador' || args[0]?.toLowerCase() === 'trabalhar')
+    ? args[1]?.toLowerCase()
+    : args[0]?.toLowerCase();
 
-    const text = `🧑‍🌾 *GESTÃO DE TRABALHADORES DO REINO* 👑\n\n` +
-                 `• 👥 *População Total:* ${k.population}\n` +
-                 `• 🧑‍🌾 *Trabalhadores Alocados:* ${totalWorkers} / ${k.population}\n\n` +
+  const countParam = (args[0]?.toLowerCase() === 'trabalhadores' || args[0]?.toLowerCase() === 'trabalhador' || args[0]?.toLowerCase() === 'trabalhar')
+    ? parseInt(args[2])
+    : parseInt(args[1]);
+
+  const jobKey = jobParam && JOBS[jobParam] ? JOBS[jobParam] : null;
+
+  if (jobKey && !isNaN(countParam) && countParam >= 0) {
+    const otherWorkersCount = Object.keys(k.workers)
+      .filter(key => key !== jobKey && key !== 'soldier')
+      .reduce((sum, key) => sum + (k.workers[key] || 0), 0);
+
+    const availableForJob = k.population - otherWorkersCount;
+
+    if (countParam > availableForJob) {
+      return reply(`⚠️ *POPULAÇÃO INSUFICIENTE PARA ESSA QUANTIDADE!*\n\n` +
+                   `• Máximo disponível para esta profissão: **${availableForJob} habitantes**\n` +
+                   `• Outros cargos já ocupam: **${otherWorkersCount} habitantes**\n` +
+                   `• População Total: **${k.population} habitantes**\n\n` +
+                   `💡 *Dicas úteis:*\n` +
+                   `• Use \`/reino trabalhadores repartir\` para balancear tudo automaticamente!\n` +
+                   `• Use \`/reino trabalhadores definir <agr> <lenh> <min> <com>\` para definir todas as 4 de uma vez.`);
+    }
+
+    k.workers[jobKey] = countParam;
+    const currentAllocated = Object.keys(k.workers)
+      .filter(key => key !== 'soldier')
+      .reduce((sum, key) => sum + (k.workers[key] || 0), 0);
+    const freePop = Math.max(0, k.population - currentAllocated);
+
+    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+
+    return reply(`✅ *TRABALHADORES REORGANIZADOS!* 👑\n\n` +
+                 `Você definiu **${countParam} habitantes** como **${jobParam.toUpperCase()}**!\n\n` +
                  `📊 *Distribuição Atual:*\n` +
-                 `• 🍞 *Agricultores:* ${w.farmer} ➔ Produzem Comida\n` +
-                 `• 🪵 *Lenhadores:* ${w.lumberjack} ➔ Produzem Madeira\n` +
-                 `• 🪨 *Mineradores:* ${w.miner} ➔ Produzem Pedra e Ferro\n` +
-                 `• 🪙 *Comerciantes:* ${w.merchant} ➔ Geram Ouro no Tesouro\n\n` +
-                 `💡 *Como definir:* \`/reino trabalhadores <profissao> <quantidade>\`\n` +
-                 `Exemplo: \`/reino trabalhadores agricultor 20\``;
-    return reply(text);
+                 `• 🌾 Agricultores: ${k.workers.farmer || 0}\n` +
+                 `• 🪵 Lenhadores: ${k.workers.lumberjack || 0}\n` +
+                 `• ⛏️ Mineradores: ${k.workers.miner || 0}\n` +
+                 `• 🪙 Comerciantes: ${k.workers.merchant || 0}\n` +
+                 `• 👥 Total Alocado: ${currentAllocated} / ${k.population} (🆓 ${freePop} livres)`);
   }
 
-  const jobKey = JOBS[job];
-  const otherWorkersCount = Object.keys(k.workers)
-    .filter(k => k !== jobKey && k !== 'soldier')
-    .reduce((sum, key) => sum + (k.workers[key] || 0), 0);
+  // 5. PAINEL INFORMATIVO DE TRABALHADORES
+  const w = k.workers;
+  const totalWorkers = (w.farmer || 0) + (w.lumberjack || 0) + (w.miner || 0) + (w.merchant || 0);
+  const freePop = Math.max(0, k.population - totalWorkers);
 
-  if (otherWorkersCount + count > k.population) {
-    return reply(`⚠️ A quantidade total de trabalhadores não pode ultrapassar a população atual (${k.population} habitantes)!`);
-  }
+  const text = `🧑‍🌾 *GESTÃO DE TRABALHADORES DO REINO* 👑\n\n` +
+               `• 👥 *População Total:* ${k.population}\n` +
+               `• 🧑‍🌾 *Trabalhadores Alocados:* ${totalWorkers} / ${k.population}\n` +
+               `• 🆓 *Cidadãos Livres (Disponíveis):* **${freePop} habitantes**\n\n` +
+               `📊 *Distribuição Atual:*\n` +
+               `• 🌾 *Agricultores:* ${w.farmer || 0} ➔ Produzem Comida\n` +
+               `• 🪵 *Lenhadores:* ${w.lumberjack || 0} ➔ Produzem Madeira\n` +
+               `• ⛏️ *Mineradores:* ${w.miner || 0} ➔ Produzem Pedra e Ferro (+Ferro nas Minas)\n` +
+               `• 🪙 *Comerciantes:* ${w.merchant || 0} ➔ Geram Ouro no Tesouro\n\n` +
+               `⚡ *COMANDOS DE GESTÃO RÁPIDA:*\n` +
+               `• ⚖️ \`/reino trabalhadores repartir\` ➔ Repartir igualmente (25% cada) de forma justa\n` +
+               `• 📝 \`/reino trabalhadores definir <agr> <lenh> <min> <com>\` ➔ Definir as 4 profissões\n` +
+               `• 🎯 \`/reino trabalhadores <profissao> <qtd>\` ➔ Alocar para profissão individual\n` +
+               `• 🔄 \`/reino trabalhadores resetar\` ➔ Desalocar todos os cidadãos\n\n` +
+               `💡 *Exemplo:* \`/reino trabalhadores minerador 30\``;
 
-  k.workers[jobKey] = count;
-  updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
-
-  return reply(`✅ *TRABALHADORES REORGANIZADOS!*\n\nVocê definiu a profissão de **${job.toUpperCase()}** para **${count} habitantes**!`);
+  return reply(text);
 }
 
 // 7. Coleta de Recursos, Impostos & Farm Passivo
@@ -610,40 +810,58 @@ async function handleCollectResources(reply, sender, user, kd) {
   let satMsg = '';
   if (k.satisfaction >= 80) {
     satMult = 1.25;
-    satMsg = '\n😊 *Bônus de Satisfação Alta:* +25% produçao!';
+    satMsg = '\n😊 *Bônus de Satisfação Alta:* +25% produção!';
   } else if (k.satisfaction < 30) {
     satMult = 0.6;
     satMsg = '\n⚠️ *Penalidade por Insatisfação:* -40% produção!';
   }
 
-  // Cálculo de produção
+  // Bônus de especialização
   const spec = k.specialization;
   const agMult = spec === 'agricola' ? 1.5 : 1.0;
   const comMult = spec === 'comercial' ? 1.35 : 1.0;
+  const milMult = spec === 'militar' ? 1.35 : 1.0; // Bônus militar para forjas e minérios de ferro
 
-  const foodEarned = Math.round((k.workers.farmer * 15 * hoursPassed * (1 + k.buildings.farms * 0.2) * agMult) * satMult);
-  const woodEarned = Math.round((k.workers.lumberjack * 10 * hoursPassed * (1 + k.buildings.mines * 0.2) * agMult) * satMult);
-  const stoneEarned = Math.round((k.workers.miner * 8 * hoursPassed * (1 + k.buildings.mines * 0.2)) * satMult);
-  const ironEarned = Math.round((k.workers.miner * 4 * hoursPassed * (1 + k.buildings.mines * 0.2)) * satMult);
+  // Níveis de construções
+  const farmLvl = k.buildings?.farms || 1;
+  const mineLvl = k.buildings?.mines || 1;
+  const marketLvl = k.buildings?.markets || 1;
 
-  const merchantGold = Math.round((k.workers.merchant * 500 * hoursPassed * (1 + k.buildings.markets * 0.25) * comMult) * satMult);
-  const taxGold = Math.round((k.population * k.tax_rate * 15 * hoursPassed * (k.satisfaction / 100)));
+  // Cálculo de produção equilibrada:
+  // - Comida: 15 base, impulsionada por Fazendas e Especialização Agrícola
+  const foodEarned = Math.round(((k.workers?.farmer || 0) * 15 * hoursPassed * (1 + farmLvl * 0.2) * agMult) * satMult);
+
+  // - Madeira: 12 base, impulsionada por Minas/Serrarias e Especialização Agrícola
+  const woodEarned = Math.round(((k.workers?.lumberjack || 0) * 12 * hoursPassed * (1 + mineLvl * 0.2) * agMult) * satMult);
+
+  // - Pedra: 10 base, impulsionada por Minas
+  const stoneEarned = Math.round(((k.workers?.miner || 0) * 10 * hoursPassed * (1 + mineLvl * 0.2)) * satMult);
+
+  // - Ferro: 10 base (anteriormente 4), impulsionada por Minas (+20% por nível) e Especialização Militar (+35%)
+  const ironEarned = Math.round(((k.workers?.miner || 0) * 10 * hoursPassed * (1 + mineLvl * 0.2) * milMult) * satMult);
+
+  // Ouro de Comerciantes e Impostos
+  const merchantGold = Math.round(((k.workers?.merchant || 0) * 500 * hoursPassed * (1 + marketLvl * 0.25) * comMult) * satMult);
+  const taxGold = Math.round(((k.population || 0) * (k.tax_rate || 10) * 15 * hoursPassed * ((k.satisfaction || 100) / 100)));
   const totalGold = merchantGold + taxGold;
 
   // Atualiza recursos e tesouro
-  k.resources.food += foodEarned;
-  k.resources.wood += woodEarned;
-  k.resources.stone += stoneEarned;
-  k.resources.iron += ironEarned;
-  k.treasury += totalGold;
+  if (!k.resources) k.resources = { food: 500, wood: 300, stone: 200, iron: 100 };
+  k.resources.food = (k.resources.food || 0) + foodEarned;
+  k.resources.wood = (k.resources.wood || 0) + woodEarned;
+  k.resources.stone = (k.resources.stone || 0) + stoneEarned;
+  k.resources.iron = (k.resources.iron || 0) + ironEarned;
+  k.treasury = (k.treasury || 0) + totalGold;
 
   k.last_collect = now;
 
-  // Eventos Aleatórios (20% de chance)
+  // Eventos Aleatórios (25% de chance)
   let randomEventStr = '';
-  if (Math.random() < 0.20) {
+  if (Math.random() < 0.25) {
     const events = [
       { text: '🌾 *Colheita Abundante:* O clima propício gerou +300 Comida extra!', run: () => k.resources.food += 300 },
+      { text: '⚒️ *Jazida de Minério Descoberta:* Seus mineradores encontraram um rico veio de ferro puro! +300 Ferro no Armazém!', run: () => k.resources.iron += 300 },
+      { text: '🪵 *Bosque Fértil Encontrado:* Os lenhadores trouxeram +300 Madeira nobre extra!', run: () => k.resources.wood += 300 },
       { text: '💎 *Mina de Ouro Descoberta:* Seus mineradores encontraram um veio valioso! +$25.000 Ouro no Tesouro!', run: () => k.treasury += 25000 },
       { text: '🐫 *Caravana de Mercadores:* Mercadores itinerantes pagaram impostos alfandegários de +$15.000 Ouro!', run: () => k.treasury += 15000 },
       { text: '👑 *Festival Real:* A população comemorou o festival e a Satisfação subiu para 100%!', run: () => k.satisfaction = 100 }
@@ -662,7 +880,7 @@ async function handleCollectResources(reply, sender, user, kd) {
                `• 🍞 +${foodEarned} Comida\n` +
                `• 🪵 +${woodEarned} Madeira\n` +
                `• 🪨 +${stoneEarned} Pedra\n` +
-               `• ⚙️ +${ironEarned} Ferro\n\n` +
+               `• ⚙️ +${ironEarned} Ferro (Mineradores & Minas Nv ${mineLvl})\n\n` +
                `💰 *RENDA DE OURO (TESOURO):*\n` +
                `• 🪙 Renda de Comerciantes: +$${merchantGold.toLocaleString('pt-BR')}\n` +
                `• 📜 Impostos Recolhidos: +$${taxGold.toLocaleString('pt-BR')}\n` +
@@ -780,7 +998,7 @@ function handleSpecialization(reply, sender, user, kd, args) {
   const specType = args[1]?.toLowerCase();
 
   const SPECS = {
-    militar: '⚔️ Militar (+35% Poder de Ataque & -20% custo de soldados)',
+    militar: '⚔️ Militar (+35% Ataque, +35% Extração de Ferro & -20% custo em ouro de soldados)',
     comercial: '🪙 Comercial (+35% Ouro dos Comerciantes & Isenção de Taxas)',
     agricola: '🌾 Agrícola (+50% Produção de Comida e Madeira)',
     defensiva: '🛡️ Defensiva (+50% Resistência de Muralhas e Defesa)',
@@ -790,9 +1008,9 @@ function handleSpecialization(reply, sender, user, kd, args) {
   if (!specType || !SPECS[specType]) {
     const text = `🎖️ *ESPECIALIZAÇÕES DO REINO* 👑\n\n` +
                  `Escolha a diretriz estratégica do seu império usando \`/reino especializar <tipo>\`:\n\n` +
-                 `• ⚔️ *militar* ➔ +35% Poder de Ataque em Guerras e recrutamento mais barato\n` +
+                 `• ⚔️ *militar* ➔ +35% Ataque em Guerras, +35% Extração de Ferro para forjas e tropas mais baratas\n` +
                  `• 🪙 *comercial* ➔ +35% na renda de ouro e isenção de taxas\n` +
-                 `• 🌾 *agricola* ➔ +50% de rendimento de Comida e Madeira na coleta\n` +
+                 `• 🌾 *agricola* ➔ +50% de rendimento de Comida e Madeira na colheita\n` +
                  `• 🛡️ *defensiva* ➔ +50% na defesa de Muralhas e suporte militar\n` +
                  `• 👥 *populacional* ➔ +50% no limite máximo de população\n\n` +
                  `💡 *Especialização Atual:* ${k.specialization ? k.specialization.toUpperCase() : 'Nenhuma'}`;
@@ -921,42 +1139,116 @@ function handleGenerals(reply, sender, user, kd, args) {
   return reply(text);
 }
 
-// 15. Mercado de Troca de Recursos
+// 15. Mercado Real de Recursos (Compra e Venda)
 function handleResourceMarket(reply, sender, user, kd, args) {
   if (!kd.isMonarch) return reply('⚠️ Apenas monarcas podem operar no Mercado Real.');
 
   const k = kd.kingdom;
-  const action = args[0]?.toLowerCase() === 'vender' ? 'vender' : args[1]?.toLowerCase();
-  const resource = (args[0]?.toLowerCase() === 'vender' ? args[1] : args[2])?.toLowerCase();
-  const amount = parseInt(args[0]?.toLowerCase() === 'vender' ? args[2] : args[3]);
+  if (!k.resources) {
+    k.resources = { food: 500, wood: 300, stone: 200, iron: 100 };
+  }
 
-  const PRICES = { food: 5, wood: 10, stone: 15, iron: 30 };
+  let action = 'menu';
+  let rawResource = '';
+  let rawAmount = 0;
 
+  const arg0 = args[0]?.toLowerCase();
+  const arg1 = args[1]?.toLowerCase();
+  const arg2 = args[2]?.toLowerCase();
+  const arg3 = args[3]?.toLowerCase();
+
+  if (arg0 === 'vender' || arg1 === 'vender') {
+    action = 'vender';
+    rawResource = arg0 === 'vender' ? arg1 : arg2;
+    rawAmount = parseInt(arg0 === 'vender' ? arg2 : arg3);
+  } else if (arg0 === 'comprar' || arg1 === 'comprar' || arg0 === 'comprarrecurso' || arg1 === 'comprarrecurso') {
+    action = 'comprar';
+    rawResource = (arg0 === 'comprar' || arg0 === 'comprarrecurso') ? arg1 : arg2;
+    rawAmount = parseInt((arg0 === 'comprar' || arg0 === 'comprarrecurso') ? arg2 : arg3);
+  }
+
+  const RESOURCE_MAP = {
+    comida: 'food',
+    food: 'food',
+    madeira: 'wood',
+    wood: 'wood',
+    pedra: 'stone',
+    stone: 'stone',
+    ferro: 'iron',
+    iron: 'iron'
+  };
+
+  const SELL_PRICES = { food: 5, wood: 10, stone: 15, iron: 30 };
+  const BUY_PRICES  = { food: 10, wood: 20, stone: 30, iron: 50 };
+
+  const resourceKey = rawResource ? RESOURCE_MAP[rawResource] : null;
+
+  // 1. VENDA DE RECURSOS (Armazém ➔ Tesouro)
   if (action === 'vender') {
-    if (!resource || !PRICES[resource] || isNaN(amount) || amount <= 0) {
-      return reply('⚠️ Uso: `/reino vender <comida|madeira|pedra|ferro> <quantidade>`\nExemplo: `/reino vender madeira 100`');
+    if (!resourceKey || isNaN(rawAmount) || rawAmount <= 0) {
+      return reply('⚠️ *Uso correto:* `/reino vender <comida|madeira|pedra|ferro> <quantidade>`\nExemplo: `/reino vender madeira 100`');
     }
 
-    if ((k.resources[resource] || 0) < amount) {
-      return reply(`⚠️ Você não possui **${amount} de ${resource}** no armazém.`);
+    if ((k.resources[resourceKey] || 0) < rawAmount) {
+      return reply(`⚠️ Você não possui **${rawAmount} de ${rawResource}** no armazém (Saldo atual: ${k.resources[resourceKey] || 0}).`);
     }
 
-    const goldEarned = amount * PRICES[resource];
-    k.resources[resource] -= amount;
-    k.treasury += goldEarned;
+    const goldEarned = rawAmount * SELL_PRICES[resourceKey];
+    k.resources[resourceKey] -= rawAmount;
+    k.treasury = (k.treasury || 0) + goldEarned;
 
     updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
 
-    return reply(`🪙 *VENDA DE RECURSOS CONCLUÍDA!*\n\nVocê vendeu **${amount} ${resource}** no mercado e recebeu **+$${goldEarned.toLocaleString('pt-BR')}** no Tesouro!`);
+    return reply(`🪙 *VENDA DE RECURSOS CONCLUÍDA!* 👑\n\n` +
+                 `Você vendeu **${rawAmount} de ${rawResource.toUpperCase()}** no mercado!\n` +
+                 `💰 *Ouro Recebido no Tesouro:* **+$${goldEarned.toLocaleString('pt-BR')}** moedas\n` +
+                 `📦 *Novo Estoque de ${rawResource}:* ${k.resources[resourceKey]}\n` +
+                 `🏛️ *Saldo do Tesouro:* $${k.treasury.toLocaleString('pt-BR')}`);
   }
 
-  const text = `🏪 *MERCADO REAL DE RECURSOS* 👑\n\n` +
-               `Venda excesso de recursos do armazém por ouro usando \`/reino vender <recurso> <qtd>\`:\n\n` +
-               `• 🍞 Comida: $5 por unidade\n` +
-               `• 🪵 Madeira: $10 por unidade\n` +
-               `• 🪨 Pedra: $15 por unidade\n` +
-               `• ⚙️ Ferro: $30 por unidade\n\n` +
-               `💡 Exemplo: \`/reino vender ferro 50\``;
+  // 2. COMPRA DE RECURSOS (Tesouro ➔ Armazém)
+  if (action === 'comprar') {
+    if (!resourceKey || isNaN(rawAmount) || rawAmount <= 0) {
+      return reply('⚠️ *Uso correto:* `/reino comprar <comida|madeira|pedra|ferro> <quantidade>`\nExemplo: `/reino comprar ferro 100`');
+    }
+
+    const unitPrice = BUY_PRICES[resourceKey];
+    const totalCost = rawAmount * unitPrice;
+
+    if ((k.treasury || 0) < totalCost) {
+      return reply(`⚠️ *OURO INSUFICIENTE NO TESOURO!*\n\n` +
+                   `• Necessário: **$${totalCost.toLocaleString('pt-BR')}** no Tesouro ($${unitPrice} cada)\n` +
+                   `• Tesouro Atual: **$${(k.treasury || 0).toLocaleString('pt-BR')}**\n\n` +
+                   `💡 Dica: Deposite ouro no reino usando \`/reino depositar <valor>\` ou aguarde impostos/comércio!`);
+    }
+
+    k.treasury -= totalCost;
+    k.resources[resourceKey] = (k.resources[resourceKey] || 0) + rawAmount;
+
+    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+
+    return reply(`🛒 *COMPRA DE RECURSOS REALIZADA COM SUCESSO!* 👑\n\n` +
+                 `Você comprou **+${rawAmount} de ${rawResource.toUpperCase()}** para os armazéns reais!\n` +
+                 `💸 *Custo Pago pelo Tesouro:* **$${totalCost.toLocaleString('pt-BR')}** moedas\n` +
+                 `📦 *Novo Estoque de ${rawResource}:* **${k.resources[resourceKey]}** unidades\n` +
+                 `🏛️ *Saldo Restante no Tesouro:* $${k.treasury.toLocaleString('pt-BR')}`);
+  }
+
+  // 3. MENU INFORMATIVO DO MERCADO
+  const text = `🏪 *MERCADO REAL DE RECURSOS & MATÉRIAS-PRIMAS* 👑\n\n` +
+               `Compre suprimentos para acelerar obras e forjas, ou venda excedentes por ouro:\n\n` +
+               `🛒 *TABELA DE COMPRA (Tesouro ➔ Armazém):*\n` +
+               `• 🍞 *Comida:* $10 por unidade ➔ \`/reino comprar comida <qtd>\`\n` +
+               `• 🪵 *Madeira:* $20 por unidade ➔ \`/reino comprar madeira <qtd>\`\n` +
+               `• 🪨 *Pedra:* $30 por unidade ➔ \`/reino comprar pedra <qtd>\`\n` +
+               `• ⚙️ *Ferro:* $50 por unidade ➔ \`/reino comprar ferro <qtd>\`\n\n` +
+               `🪙 *TABELA DE VENDA (Armazém ➔ Tesouro):*\n` +
+               `• 🍞 *Comida:* $5 por unidade ➔ \`/reino vender comida <qtd>\`\n` +
+               `• 🪵 *Madeira:* $10 por unidade ➔ \`/reino vender madeira <qtd>\`\n` +
+               `• 🪨 *Pedra:* $15 por unidade ➔ \`/reino vender pedra <qtd>\`\n` +
+               `• ⚙️ *Ferro:* $30 por unidade ➔ \`/reino vender ferro <qtd>\`\n\n` +
+               `💡 *Exemplo de Compra:* \`/reino comprar ferro 100\`\n` +
+               `💡 *Exemplo de Venda:* \`/reino vender madeira 50\``;
 
   return reply(text);
 }
@@ -1312,25 +1604,31 @@ function renderKingdomHelp(reply) {
                `• \`/reino comprar <nome>\` ➔ Fundar novo reino ($200.000)\n` +
                `• \`/reino renomear <nome>\` ➔ Alterar nome do reino\n` +
                `• \`/reino\` ➔ Painel imperial do reino\n` +
-               `• \`/reino construir\` ➔ Menu de construção e expansão\n\n` +
-               `👥 *POPULAÇÃO & ECONOMIA:*\n` +
-               `• \`/reino recrutar <qtd>\` ➔ Recrutar novos habitantes\n` +
-               `• \`/reino trabalhadores\` ➔ Alocar tarefas (Agr, Lenh, Min, Com)\n` +
-               `• \`/reino coletar\` ➔ Coletar recursos e ouro produzidos\n` +
-               `• \`/reino imposto <1-100>\` ➔ Definir taxa de impostos\n` +
-               `• \`/reino sacar <valor>\` ➔ Sacar ouro do tesouro para carteira\n` +
-               `• \`/reino depositar <valor>\` ➔ Depositar carteira no tesouro\n` +
-               `• \`/reino vender\` ➔ Mercado de troca de recursos por ouro\n\n` +
+               `• \`/reino construir\` ➔ Menu de construção e expansão de estruturas\n\n` +
+               `👥 *POPULAÇÃO & TRABALHADORES:*\n` +
+               `• \`/reino recrutar <qtd>\` ➔ Recrutar novos habitantes para o reino\n` +
+               `• \`/reino trabalhadores repartir\` ➔ Repartir população igualmente de forma justa\n` +
+               `• \`/reino trabalhadores definir <agr> <lenh> <min> <com>\` ➔ Definir as 4 tarefas\n` +
+               `• \`/reino trabalhadores <profissao> <qtd>\` ➔ Alocar cargo específico\n` +
+               `• \`/reino trabalhadores resetar\` ➔ Desalocar todos os cidadãos\n` +
+               `• \`/reino trabalhadores\` ➔ Painel de status dos trabalhadores\n\n` +
+               `🌾 *ECONOMIA, MERCADO & RECURSOS:*\n` +
+               `• \`/reino coletar\` ➔ Coletar colheita, ferro, madeira, pedra e impostos\n` +
+               `• \`/reino comprar <recurso> <qtd>\` ➔ Comprar ferro/recursos no Mercado\n` +
+               `• \`/reino vender <recurso> <qtd>\` ➔ Vender excedentes por ouro no Mercado\n` +
+               `• \`/reino imposto <1-100>\` ➔ Definir taxa de impostos da população\n` +
+               `• \`/reino sacar <valor>\` ➔ Sacar ouro do tesouro para sua carteira\n` +
+               `• \`/reino depositar <valor>\` ➔ Injetar ouro da carteira no tesouro\n\n` +
                `⚔️ *EXÉRCITO & GUERRAS:*\n` +
-               `• \`/reino especializar <tipo>\` ➔ Escolher via estratégica (Nível 3)\n` +
-               `• \`/reino treinar <qtd>\` ➔ Treinar soldados\n` +
-               `• \`/reino equipamentos\` ➔ Evoluir armamento militar\n` +
-               `• \`/reino general\` ➔ Contratar generais com bônus\n` +
-               `• \`/guerra @rei\` ➔ Iniciar guerra de conquista\n\n` +
+               `• \`/reino especializar <tipo>\` ➔ Escolher diretriz estratégica (Nível 3)\n` +
+               `• \`/reino treinar <qtd>\` ➔ Treinar novos soldados para o exército\n` +
+               `• \`/reino equipamentos\` ➔ Evoluir armaduras e armas militares\n` +
+               `• \`/reino general\` ➔ Contratar generais com habilidades únicas\n` +
+               `• \`/guerra @rei\` ➔ Iniciar guerra de invasão e conquista\n\n` +
                `🤝 *DIPLOMACIA & RANKING:*\n` +
-               `• \`/alianca @rei\` ➔ Propor ou aceitar aliança real\n` +
-               `• \`/reino casamento @rei\` ➔ Propor casamento real\n` +
-               `• \`/reinorank\` ➔ Ranking dos maiores impérios`;
+               `• \`/alianca @rei\` ➔ Propor ou aceitar aliança diplomática\n` +
+               `• \`/reino casamento @rei\` ➔ Propor matrimônio real\n` +
+               `• \`/reinorank\` ➔ Ranking global dos maiores impérios`;
 
   return reply(text);
 }

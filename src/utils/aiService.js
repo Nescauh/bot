@@ -5,12 +5,21 @@ dotenv.config();
 // Token de backup da Groq formatado dinamicamente para evitar acionamento do Push Protection
 const FALLBACK_GROQ_KEY = ['gsk_zdIKWanCDcNiWbd0sx', 'rlWGdyb3FYdEZGVoUOO97sNM4RUfyQeOVC'].join('');
 
-export async function askAi(prompt, systemInstruction = 'Você é uma inteligência artificial assistente no WhatsApp. Responda em português do Brasil de forma clara, amigável e direta.') {
+/**
+ * Envia uma conversa multi-turn completa para a IA (Groq / OpenAI / OpenRouter)
+ * @param {Array<{role: string, content: string}>} messages Array de mensagens
+ * @param {Object} options Configurações adicionais
+ * @returns {Promise<string>} Resposta gerada
+ */
+export async function askAiChat(messages, options = {}) {
   const envKey = process.env.AI_API_KEY;
   const apiKey = (envKey && envKey.trim()) ? envKey.trim() : FALLBACK_GROQ_KEY;
 
+  if (!Array.isArray(messages) || messages.length === 0) {
+    throw new Error('Array de mensagens vazio para askAiChat.');
+  }
 
-  // 2. Prioridade Máxima: Groq API (Inferência ultrarrápida com LLaMA 3.3 70B)
+  // 1. Prioridade Máxima: Groq API (LLaMA 3.3 70B & LLaMA 3.1 8B)
   if (apiKey.startsWith('gsk_')) {
     const groqModels = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
     for (const model of groqModels) {
@@ -19,10 +28,9 @@ export async function askAi(prompt, systemInstruction = 'Você é uma inteligên
           'https://api.groq.com/openai/v1/chat/completions',
           {
             model,
-            messages: [
-              { role: 'system', content: systemInstruction },
-              { role: 'user', content: prompt }
-            ]
+            messages,
+            temperature: options.temperature || 0.7,
+            max_tokens: options.max_tokens || 800
           },
           {
             headers: {
@@ -50,10 +58,8 @@ export async function askAi(prompt, systemInstruction = 'Você é uma inteligên
         'https://api.openai.com/v1/chat/completions',
         {
           model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: prompt }
-          ]
+          messages,
+          temperature: options.temperature || 0.7
         },
         {
           headers: {
@@ -80,10 +86,7 @@ export async function askAi(prompt, systemInstruction = 'Você é uma inteligên
         'https://openrouter.ai/api/v1/chat/completions',
         {
           model: 'google/gemma-4-31b-it:free',
-          messages: [
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: prompt }
-          ]
+          messages
         },
         {
           headers: {
@@ -104,32 +107,40 @@ export async function askAi(prompt, systemInstruction = 'Você é uma inteligên
   }
 
   // 4. Fallback final via Groq Fallback Key
-  if (!apiKey.startsWith('gsk_')) {
-    try {
-      const res = await axios.post(
-        'https://api.groq.com/openai/v1/chat/completions',
-        {
-          model: 'llama-3.3-70b-versatile',
-          messages: [
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: prompt }
-          ]
+  try {
+    const res = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        model: 'llama-3.3-70b-versatile',
+        messages
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${FALLBACK_GROQ_KEY}`,
+          'Content-Type': 'application/json'
         },
-        {
-          headers: {
-            'Authorization': `Bearer ${FALLBACK_GROQ_KEY}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 15000
-        }
-      );
-
-      const content = res.data?.choices?.[0]?.message?.content;
-      if (content && content.trim()) {
-        return content.trim();
+        timeout: 15000
       }
-    } catch (_) {}
+    );
+
+    const content = res.data?.choices?.[0]?.message?.content;
+    if (content && content.trim()) {
+      return content.trim();
+    }
+  } catch (err) {
+    console.error('❌ Todas as APIs de IA falharam:', err.message);
   }
 
   throw new Error('Não foi possível obter resposta da Inteligência Artificial no momento.');
+}
+
+/**
+ * Função simplificada legada para perguntas diretas
+ */
+export async function askAi(prompt, systemInstruction = 'Você é uma inteligência artificial assistente no WhatsApp. Responda em português do Brasil de forma clara, amigável e direta.') {
+  const messages = [
+    { role: 'system', content: systemInstruction },
+    { role: 'user', content: prompt }
+  ];
+  return askAiChat(messages);
 }

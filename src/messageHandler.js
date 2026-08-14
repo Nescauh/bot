@@ -85,6 +85,7 @@ import { handleVoiceSystemCommands } from './commands/voice_system.js';
 import { handleProfilePrestigeCommands } from './commands/profile_prestige.js';
 import { handleEventsSystemCommands } from './commands/events_system.js';
 import { handleVipShopCommands } from './commands/vip_shop.js';
+import { handleTradeCommands } from './commands/trade_system.js';
 
 import queueManager from './queue/QueueManager.js';
 import { handleQueueStatsCommand } from './commands/admin_extra/queueStats.js';
@@ -426,10 +427,6 @@ export async function handleMessages(rawSock, msg) {
                        `─── Comandos Originais ───\n` +
                        `「 🎵 」/play — baixar música (YouTube / TikTok / Instagram)\n` +
                        `「 🎥 」/video — Baixar vídeo (YouTube / TikTok / Instagram)\n` +
-                       `「 📸 」/ig — vídeo do Instagram\n` +
-                       `「 🎧 」/igaudio — áudio do Instagram\n` +
-                       `「 📱 」/tiktok — vídeo do TikTok sem marca d'água\n` +
-                       `「 🎶 」/tiktokaudio — áudio MP3 do TikTok\n` +
                        `「 🖼️ 」/sticker — Figurinha\n` +
                        `「 🖼️ 」/unsticker — transforma sticker em imagem\n` +
                        `「 💍 」/casar - pedir casamento\n` +
@@ -486,26 +483,26 @@ export async function handleMessages(rawSock, msg) {
                        `「 🤝 」/alianca @rei — firmar pacto diplomático e suporte defensivo\n` +
                        `「 💍 」/casamentoreal @rei — casamento real com bônus de impostos\n` +
                        `「 🏆 」/reinorank — ranking global dos maiores impérios\n\n` +
-                       `⚔️ *SISTEMA RPG & RAIDS*\n` +
-                       `「 🛡️ 」/classe — escolher sua classe (Guerreiro, Mago, Arqueiro)\n` +
-                       `「 📜 」/missao — cumprir missões diárias com prêmios\n` +
-                       `「 🐉 」/raid (ou /chefe) — batalha em grupo contra chefões\n\n` +
-                       `🎨 *GERAÇÃO DE MÍDIA & IA*\n` +
-                       `「 🧠 」/ia — conversar com Inteligência Artificial\n` +
+                       `🤝 *SISTEMA DE TROCAS & COMÉRCIO*\n` +
+                       `「 🤝 」/trocar @user — propor troca de recursos, itens ou moedas\n` +
+                       `「 ✅ 」/trocar aceitar — aceitar proposta de troca recebida\n` +
+                       `「 📦 」/trocar adicionar <item/recurso> <qtd> — ofertar bens na bancada\n` +
+                       `「 📊 」/trocar ver — visualizar bancada de negociação\n` +
+                       `「 🔒 」/trocar confirmar — confirmar e finalizar a troca mútua\n\n` +
+                       `🌸 *QUINTUPLETS & INTELIGÊNCIA ARTIFICIAL*\n` +
+                       `「 🌸 」/ia irmas — ver e escolher entre as 5 irmãs Nakano\n` +
+                       `「 🦋 」/nino — ativar Nino Nakano (Tsundere & Culinária)\n` +
+                       `「 🎧 」/miku — ativar Miku Nakano (Tímida & Sengoku)\n` +
+                       `「 🎭 」/ichika — ativar Ichika Nakano (Onee-san & Atriz)\n` +
+                       `「 🍀 」/yotsuba — ativar Yotsuba Nakano (Genki & Esportista)\n` +
+                       `「 ⭐ 」/itsuki — ativar Itsuki Nakano (Comilona & Estudiosa)\n` +
+                       `「 🧠 」/ia lembra <fato> — gravar memória pessoal na IA\n` +
+                       `「 📜 」/ia memorias — ver memórias salvas sobre você\n` +
                        `「 🎨 」/imagem — gerar artes e imagens incríveis por IA\n` +
-                       `「 ✂️ 」/removerfundo — remover fundo de imagem/foto\n` +
-                       `「 🔍 」/melhorar (ou /hd) — aprimorar qualidade de fotos\n` +
-                       `「 🎨 」/colorir — colorir imagens em preto e branco\n` +
                        `「 🎙️ 」/voz (ou /clonarvoz) — sintetizar e clonar voz\n` +
                        `「 🌐 」/traduzir — traduzir textos/mensagens\n` +
                        `「 📝 」/resumir — resumir textos longos\n` +
                        `「 💡 」/explicar — explicações detalhadas de assuntos\n\n` +
-                       `📥 *DOWNLOADERS MULTI-PLATAFORMA*\n` +
-                       `「 📌 」/pinterest — baixar fotos/vídeos do Pinterest\n` +
-                       `「 📘 」/facebook — baixar vídeos do Facebook\n` +
-                       `「 🧵 」/threads — baixar mídias do Threads\n` +
-                       `「 🎧 」/spotify — pesquisar e baixar músicas do Spotify\n` +
-                       `「 🐦 」/twitter — baixar vídeos e mídias do Twitter/X\n\n` +
                        `👥 *ADMINISTRAÇÃO*\n` +
                        `「 🚪 」/kick - expulsar membro do grupo\n` +
                        `「 👑 」/promote - promover membro a admin\n` +
@@ -712,8 +709,9 @@ export async function handleMessages(rawSock, msg) {
     else if (command === 'ocr') await queueManager.enqueueHeavyCommand(from, command, () => handleOcrCommand(sock, msg));
     // 📊 Status da Fila
     else if (['queue', 'filas', 'fila'].includes(command)) await handleQueueStatsCommand(sock, msg);
-    // 🧠 IA Avançada (Memória & Personalidades)
-    else if (command === 'ia' && args.length > 0 && ['modo', 'personality', 'estilo', 'lembra', 'lembrar', 'memorizar', 'memoria', 'memorias', 'esquecer', 'limparmemoria'].includes(args[0]?.toLowerCase())) {
+    // 🧠 IA Avançada (Personalidades das 5 Nakano & Memória Contínua)
+    else if (['nino', 'miku', 'ichika', 'yotsuba', 'itsuki'].includes(command) ||
+             (command === 'ia' && args.length > 0 && ['nino', 'miku', 'ichika', 'yotsuba', 'itsuki', 'irmas', 'irmãs', 'quintuplets', 'personagens', 'modo', 'personality', 'estilo', 'lembra', 'lembrar', 'memorizar', 'memoria', 'memorias', 'esquecer', 'limparmemoria'].includes(args[0]?.toLowerCase()))) {
       await handleAiExtraCommands(sock, msg, command, args, sender);
     }
     // 🏦 Banco & Imóveis & Pets
@@ -723,6 +721,10 @@ export async function handleMessages(rawSock, msg) {
     // 👑 Sistema de Monarquia, Reinos, Guerras & Alianças
     else if (['reino', 'reinos', 'guerra', 'guerras', 'lojareino', 'reinoloja', 'alianca', 'aliança', 'reinorank', 'rankingreino', 'casamentoreal'].includes(command)) {
       await handleKingdomCommands(sock, msg, command, args, sender);
+    }
+    // 🤝 Sistema de Trocas & Comércio (Trade)
+    else if (['trocar', 'troca', 'trade', 'negociar'].includes(command)) {
+      await handleTradeCommands(sock, msg, command, args, sender, mentioned);
     }
     // 🎰 Minigames & Cassino com IA
     else if (['blackjack', '21', 'poker', 'cacaniquel', 'slots', 'pescar', 'pesca', 'roubar'].includes(command)) {

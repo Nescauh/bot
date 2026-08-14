@@ -37,11 +37,14 @@ export async function handleBankMarketCommands(sock, msg, command, args, sender)
       let amount = 0;
       if (valStr === 'tudo' || valStr === 'all') {
         amount = user.wallet;
+        if (amount <= 0) {
+          return reply('⚠️ Você não possui moedas na sua carteira pessoal para depositar.');
+        }
       } else {
         amount = sanitizeMoney(valStr);
       }
 
-      if (!validateEconomicValue(valStr === 'tudo' || valStr === 'all' ? amount : valStr) || amount <= 0) {
+      if (!validateEconomicValue(amount) || amount <= 0) {
         return reply('⚠️ Digite um valor numérico válido maior que zero.');
       }
 
@@ -53,8 +56,9 @@ export async function handleBankMarketCommands(sock, msg, command, args, sender)
       const newBank = user.bank + amount;
       await updateUser(sender, { bank: newBank });
       const updatedUser = getUser(sender);
+      const newWallet = updatedUser ? updatedUser.wallet : (user.wallet - amount);
 
-      return reply(`🏦 *DEPÓSITO BANCÁRIO REALIZADO!*\n\n` +
+      return reply(`🏦 *DEPÓSITO BANCÁRIO REALIZADO!* 💰\n\n` +
                    `💸 *Depositado:* $${amount.toLocaleString('pt-BR')}\n` +
                    `💵 *Carteira:* $${newWallet.toLocaleString('pt-BR')}\n` +
                    `🏦 *Banco:* $${newBank.toLocaleString('pt-BR')}\n\n` +
@@ -70,11 +74,14 @@ export async function handleBankMarketCommands(sock, msg, command, args, sender)
       let amount = 0;
       if (valStr === 'tudo' || valStr === 'all') {
         amount = user.bank;
+        if (amount <= 0) {
+          return reply('⚠️ Você não possui saldo guardado no banco para sacar.');
+        }
       } else {
         amount = sanitizeMoney(valStr);
       }
 
-      if (!validateEconomicValue(valStr === 'tudo' || valStr === 'all' ? amount : valStr) || amount <= 0) {
+      if (!validateEconomicValue(amount) || amount <= 0) {
         return reply('⚠️ Digite um valor numérico válido maior que zero.');
       }
 
@@ -86,8 +93,9 @@ export async function handleBankMarketCommands(sock, msg, command, args, sender)
       await updateUser(sender, { bank: newBank });
       await addBalance(sender, amount);
       const updatedUser = getUser(sender);
+      const newWallet = updatedUser ? updatedUser.wallet : (user.wallet + amount);
 
-      return reply(`🏧 *SAQUE BANCÁRIO REALIZADO!*\n\n` +
+      return reply(`🏧 *SAQUE BANCÁRIO REALIZADO!* 💵\n\n` +
                    `💵 *Sacado:* $${amount.toLocaleString('pt-BR')}\n` +
                    `💵 *Carteira:* $${newWallet.toLocaleString('pt-BR')}\n` +
                    `🏦 *Banco:* $${newBank.toLocaleString('pt-BR')}`);

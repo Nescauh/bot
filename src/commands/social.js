@@ -1,6 +1,7 @@
 import { getDatabase, updateDatabase } from '../database.js';
 import { getUser, updateUser } from '../database/sqlite.js';
 import { askAi } from '../utils/aiService.js';
+import { getKingdomData, mergeKingdoms, bestowCoRulership, splitKingdoms } from './kingdom_system.js';
 
 // Função auxiliar para gerar relatos engraçados de Brainrot com a IA
 async function getBrainrotAiStory(prompt) {
@@ -83,11 +84,35 @@ export async function handleSocialCommands(sock, msg, command, args, sender, men
         noivoExtra = typeof noivoUser.extra_data === 'string' ? JSON.parse(noivoUser.extra_data || '{}') : (noivoUser.extra_data || {});
       } catch (_) {}
 
+      const senderKd = getKingdomData(senderUser);
+      const noivoKd = getKingdomData(noivoUser);
+
+      let isKingdomUnification = false;
+      let isCoRulership = false;
+      let unifiedKingdomName = '';
+
+      if (senderKd?.isMonarch && noivoKd?.isMonarch) {
+        // CASAMENTO ENTRE DOIS MONARCAS DE REINOS DISTINTOS -> FUSÃO COMPLETA DOS DOIS REINOS EM UM SÓ
+        const merged = mergeKingdoms(senderKd, noivoKd, sender, noivo);
+        isKingdomUnification = true;
+        unifiedKingdomName = merged.name;
+      } else if (senderKd?.isMonarch && !noivoKd?.isMonarch) {
+        // Sender é monarca, noivo junta-se como co-governante consorte
+        bestowCoRulership(sender, noivo);
+        isCoRulership = true;
+        unifiedKingdomName = senderKd.kingdom.name;
+      } else if (!senderKd?.isMonarch && noivoKd?.isMonarch) {
+        // Noivo é monarca, sender junta-se como co-governante consorte
+        bestowCoRulership(noivo, sender);
+        isCoRulership = true;
+        unifiedKingdomName = noivoKd.kingdom.name;
+      }
+
       const senderRoyal = (senderExtra.houses || []).some(h => ['vila', 'reinopequeno', 'imperio'].includes(h));
       const noivoRoyal = (noivoExtra.houses || []).some(h => ['vila', 'reinopequeno', 'imperio'].includes(h));
-      const isRoyalMarriage = senderRoyal || noivoRoyal;
+      const isRoyalMarriage = isKingdomUnification || isCoRulership || senderRoyal || noivoRoyal;
 
-      if (isRoyalMarriage) {
+      if (!isKingdomUnification && !isCoRulership && isRoyalMarriage) {
         senderExtra.kingdom_alliance = noivo;
         noivoExtra.kingdom_alliance = sender;
         updateUser(sender, { extra_data: JSON.stringify(senderExtra) });
@@ -98,15 +123,37 @@ export async function handleSocialCommands(sock, msg, command, args, sender, men
         d.casamentos[sender] = { parceiro: noivo, since: Date.now(), isRoyal: isRoyalMarriage };
         d.casamentos[noivo] = { parceiro: sender, since: Date.now(), isRoyal: isRoyalMarriage };
         delete d.pedidosCasamento[sender];
+        delete d.pedidosCasamento[noivo];
       });
+
+      if (isKingdomUnification) {
+        return reply(`👑 *GRANDE UNIÃO DE REINOS & CASAMENTO REAL!* 🏰💍\n\n` +
+                     `🎉 Os soberanos @${sender.split('@')[0]} e @${noivo.split('@')[0]} uniram seus reinos e coroas no Matrimônio Sagrado!\n\n` +
+                     `🏰 *Novo Reino Unificado:* **${unifiedKingdomName}**\n\n` +
+                     `✨ *TRANSFORMAÇÕES DA UNIÃO REAL:*\n` +
+                     `• 👑 *Soberania Conjunta:* Ambos os noivos passam a governar o mesmo reino como Rei & Rainha!\n` +
+                     `• 💰 *Tesouros e Recursos Fundidos:* Todos os cofres, comida, madeira, pedra e ferro foram somados!\n` +
+                     `• ⚔️ *Exércitos Unidos:* Tropas e generais de ambos os impérios agora marcham juntos!\n` +
+                     `• 🏰 *Edificações Integradas:* Todas as fazendas, minas, mercados e quartéis combinados!\n` +
+                     `• 🤝 *Comando Compartilhado:* Ambos podem usar \`/reino\` para evoluir e administrar o império!`, [sender, noivo]);
+      }
+
+      if (isCoRulership) {
+        return reply(`👑 *CASAMENTO REAL & COROAÇÃO DE CONSORTE!* 🏰💍\n\n` +
+                     `🎉 @${sender.split('@')[0]} e @${noivo.split('@')[0]} casaram-se no Palácio Real!\n\n` +
+                     `🏰 *Reino Soberano:* **${unifiedKingdomName}**\n\n` +
+                     `✨ *BENEFÍCIOS REAIS:*\n` +
+                     `• 👑 Ambos agora compartilham o trono do reino como Co-Governantes!\n` +
+                     `• 💰 Gestão conjunta do tesouro, recursos e exército no \`/reino\`!`, [sender, noivo]);
+      }
 
       if (isRoyalMarriage) {
         return reply(`👑 *CASAMENTO REAL & ALIANÇA MATRIMONIAL DE TERRENOS!* 🏰\n\n` +
-                     `🎉 Os soberanos @${sender.split('@')[0]} e @${noivo.split('@')[0]} uniram seus impérios e coroas no Matrimônio Real!\n\n` +
+                     `🎉 Os nobres @${sender.split('@')[0]} e @${noivo.split('@')[0]} uniram suas casas no Matrimônio Real!\n\n` +
                      `✨ *BENEFÍCIOS DA DINASTIA UNIDA:*\n` +
-                     `• 👑 Título Real: *Rei & Rainha / Imperadores da Dinastia*\n` +
+                     `• 👑 Título Real: *Rei & Rainha / Nobres da Dinastia*\n` +
                      `• 💰 +50% Bônus em aluguéis e impostos de terrenos no /daily!\n` +
-                     `• 🤝 Pacto Diplomático Automático e Defesa Conjunta nas Guerras de Reinos!`, [sender, noivo]);
+                     `• 🤝 Pacto Diplomático Automático e Defesa Conjunta!`, [sender, noivo]);
       }
 
       return reply(`💍 Parabéns! @${sender.split('@')[0]} e @${noivo.split('@')[0]} agora estão casados! 🎉\nQue essa união seja repleta de felicidade!`, [sender, noivo]);
@@ -132,10 +179,28 @@ export async function handleSocialCommands(sock, msg, command, args, sender, men
 
       const parceiro = db.casamentos[sender].parceiro;
 
+      const senderUser = getUser(sender);
+      const parceiroUser = getUser(parceiro);
+      const senderKd = getKingdomData(senderUser);
+      const parceiroKd = getKingdomData(parceiroUser);
+
+      const hadUnifiedKingdom = (senderKd?.kingdom?.is_unified && senderKd?.kingdom?.marriage === parceiro) ||
+                                (parceiroKd?.kingdom?.is_unified && parceiroKd?.kingdom?.marriage === sender);
+
+      if (hadUnifiedKingdom) {
+        splitKingdoms(sender, parceiro);
+      }
+
       updateDatabase((d) => {
         delete d.casamentos[sender];
         delete d.casamentos[parceiro];
       });
+
+      if (hadUnifiedKingdom) {
+        return reply(`💔 *DISSOLUÇÃO DO MATRIMÔNIO REAL E DIVISÃO DE REINOS!* 🏰\n\n` +
+                     `@${sender.split('@')[0]} e @${parceiro.split('@')[0]} se divorciaram!\n\n` +
+                     `📜 *Partilha Imperial:* O Reino Unido foi dissolvido. O tesouro, recursos, exércitos e terras foram divididos igualmente (50%) entre ambos os monarcas, que agora governam reinos soberanos independentes.`, [sender, parceiro]);
+      }
 
       return reply(`💔 Triste notícia! @${sender.split('@')[0]} e @${parceiro.split('@')[0]} se divorciaram... A vida segue.`, [sender, parceiro]);
     }

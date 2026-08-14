@@ -1,6 +1,228 @@
 import { getUser, updateUser, getStore } from '../database/sqlite.js';
+import { getDatabase, updateDatabase } from '../database.js';
 import { askAi } from '../utils/aiService.js';
 import { HOUSES } from './bank_market.js';
+
+// Salva dados do reino com sincronização automática entre co-governantes / cônjuges
+export function saveKingdomData(userJid, kd, extraUserFields = {}) {
+  updateUser(userJid, { ...extraUserFields, extra_data: JSON.stringify(kd.extraData) });
+
+  const spouseJid = kd.kingdom?.marriage || kd.extraData?.kingdom_alliance || kd.kingdom?.co_rulers?.find(j => j !== userJid);
+  if (spouseJid && kd.kingdom?.is_unified) {
+    const spouseUser = getUser(spouseJid);
+    if (spouseUser) {
+      let spouseExtra = {};
+      try {
+        spouseExtra = typeof spouseUser.extra_data === 'string' ? JSON.parse(spouseUser.extra_data || '{}') : (spouseUser.extra_data || {});
+      } catch (_) {
+        spouseExtra = {};
+      }
+      const spouseKingdom = JSON.parse(JSON.stringify(kd.kingdom));
+      spouseKingdom.marriage = userJid;
+      spouseExtra.kingdom = spouseKingdom;
+      spouseExtra.kingdom_alliance = userJid;
+      updateUser(spouseJid, { extra_data: JSON.stringify(spouseExtra) });
+    }
+  }
+}
+
+// Une dois reinos distintos em um único Reino Unido / Grande Império
+export function mergeKingdoms(kd1, kd2, jid1, jid2) {
+  const k1 = kd1.kingdom;
+  const k2 = kd2.kingdom;
+
+  // Nome do reino unificado
+  const cleanName1 = (k1.name || 'Reino 1').replace(/^Reino Unido de /i, '');
+  const cleanName2 = (k2.name || 'Reino 2').replace(/^Reino Unido de /i, '');
+  const unifiedName = `Reino Unido de ${cleanName1} & ${cleanName2}`.slice(0, 45);
+
+  // Nível, XP e Reputação combinados
+  const unifiedLevel = Math.max(k1.level || 1, k2.level || 1);
+  const unifiedXp = (k1.xp || 0) + (k2.xp || 0);
+
+  // Tesouro total combinado
+  const unifiedTreasury = (k1.treasury || 0) + (k2.treasury || 0);
+
+  // Recursos somados
+  const unifiedResources = {
+    food: (k1.resources?.food || 0) + (k2.resources?.food || 0),
+    wood: (k1.resources?.wood || 0) + (k2.resources?.wood || 0),
+    stone: (k1.resources?.stone || 0) + (k2.resources?.stone || 0),
+    iron: (k1.resources?.iron || 0) + (k2.resources?.iron || 0)
+  };
+
+  // População total somada
+  const unifiedPopulation = (k1.population || 50) + (k2.population || 50);
+
+  // Trabalhadores somados
+  const unifiedWorkers = {
+    farmer: (k1.workers?.farmer || 0) + (k2.workers?.farmer || 0),
+    lumberjack: (k1.workers?.lumberjack || 0) + (k2.workers?.lumberjack || 0),
+    miner: (k1.workers?.miner || 0) + (k2.workers?.miner || 0),
+    merchant: (k1.workers?.merchant || 0) + (k2.workers?.merchant || 0),
+    soldier: (k1.workers?.soldier || 0) + (k2.workers?.soldier || 0)
+  };
+
+  // Exército e generais unidos
+  const unifiedArmy = {
+    soldiers: (k1.army?.soldiers || 0) + (k2.army?.soldiers || 0),
+    equipment_level: Math.max(k1.army?.equipment_level || 1, k2.army?.equipment_level || 1),
+    generals: [...new Set([...(k1.army?.generals || []), ...(k2.army?.generals || [])])]
+  };
+
+  // Construções fortificadas
+  const unifiedBuildings = {
+    town_center: Math.max(k1.buildings?.town_center || 1, k2.buildings?.town_center || 1),
+    houses: (k1.buildings?.houses || 1) + (k2.buildings?.houses || 1),
+    farms: (k1.buildings?.farms || 1) + (k2.buildings?.farms || 1),
+    mines: (k1.buildings?.mines || 1) + (k2.buildings?.mines || 1),
+    markets: (k1.buildings?.markets || 1) + (k2.buildings?.markets || 1),
+    barracks: (k1.buildings?.barracks || 1) + (k2.buildings?.barracks || 1),
+    walls: Math.max(k1.buildings?.walls || 1, k2.buildings?.walls || 1)
+  };
+
+  const unifiedSpec = k1.specialization || k2.specialization || null;
+  const unifiedConquered = [...new Set([...(k1.conquered_kingdoms || []), ...(k2.conquered_kingdoms || [])])];
+
+  const baseKingdom = {
+    name: unifiedName,
+    level: unifiedLevel,
+    xp: unifiedXp,
+    specialization: unifiedSpec,
+    treasury: unifiedTreasury,
+    tax_rate: Math.round(((k1.tax_rate ?? 10) + (k2.tax_rate ?? 10)) / 2),
+    satisfaction: Math.round(((k1.satisfaction ?? 100) + (k2.satisfaction ?? 100)) / 2),
+    daily_withdrawal_today: 0,
+    last_withdrawal_reset: Date.now(),
+    population: unifiedPopulation,
+    resources: unifiedResources,
+    buildings: unifiedBuildings,
+    workers: unifiedWorkers,
+    army: unifiedArmy,
+    alliance: null,
+    co_rulers: [jid1, jid2],
+    is_unified: true,
+    last_collect: Math.max(k1.last_collect || 0, k2.last_collect || 0),
+    last_war: Math.max(k1.last_war || 0, k2.last_war || 0),
+    conquered_kingdoms: unifiedConquered
+  };
+
+  // Salvar no primeiro cônjuge
+  kd1.extraData.kingdom = { ...baseKingdom, marriage: jid2 };
+  kd1.extraData.kingdom_alliance = jid2;
+  saveKingdomData(jid1, kd1);
+
+  // Salvar no segundo cônjuge
+  kd2.extraData.kingdom = { ...baseKingdom, marriage: jid1 };
+  kd2.extraData.kingdom_alliance = jid1;
+  saveKingdomData(jid2, kd2);
+
+  return baseKingdom;
+}
+
+// Concede co-governança a um cônjuge quando apenas um possui reino
+export function bestowCoRulership(monarchJid, spouseJid) {
+  const monarchUser = getUser(monarchJid);
+  const spouseUser = getUser(spouseJid);
+  if (!monarchUser || !spouseUser) return;
+
+  const monarchKd = getKingdomData(monarchUser);
+  const spouseKd = getKingdomData(spouseUser);
+  if (!monarchKd || !monarchKd.isMonarch) return;
+
+  const k = monarchKd.kingdom;
+  k.marriage = spouseJid;
+  k.is_unified = true;
+  k.co_rulers = [monarchJid, spouseJid];
+
+  monarchKd.extraData.kingdom = k;
+  monarchKd.extraData.kingdom_alliance = spouseJid;
+  saveKingdomData(monarchJid, monarchKd);
+
+  spouseKd.extraData.kingdom = { ...k, marriage: monarchJid };
+  spouseKd.extraData.kingdom_alliance = monarchJid;
+  saveKingdomData(spouseJid, spouseKd);
+}
+
+// Divide um reino unificado em caso de divórcio (50% para cada)
+export function splitKingdoms(jid1, jid2) {
+  const u1 = getUser(jid1);
+  const u2 = getUser(jid2);
+  if (!u1 || !u2) return;
+
+  const kd1 = getKingdomData(u1);
+  const kd2 = getKingdomData(u2);
+  const k = kd1?.kingdom || kd2?.kingdom;
+  if (!k) return;
+
+  const halfTreasury = Math.floor((k.treasury || 0) / 2);
+  const halfFood = Math.floor((k.resources?.food || 0) / 2);
+  const halfWood = Math.floor((k.resources?.wood || 0) / 2);
+  const halfStone = Math.floor((k.resources?.stone || 0) / 2);
+  const halfIron = Math.floor((k.resources?.iron || 0) / 2);
+  const halfPop = Math.max(20, Math.floor((k.population || 50) / 2));
+  const halfSoldiers = Math.floor((k.army?.soldiers || 0) / 2);
+
+  const makeIndependentK = (name) => ({
+    name: name,
+    level: Math.max(1, k.level - 1),
+    xp: Math.floor((k.xp || 0) / 2),
+    specialization: k.specialization,
+    treasury: halfTreasury,
+    tax_rate: k.tax_rate || 10,
+    satisfaction: 90,
+    daily_withdrawal_today: 0,
+    last_withdrawal_reset: Date.now(),
+    population: halfPop,
+    resources: {
+      food: halfFood,
+      wood: halfWood,
+      stone: halfStone,
+      iron: halfIron
+    },
+    buildings: {
+      town_center: Math.max(1, (k.buildings?.town_center || 1)),
+      houses: Math.max(1, Math.floor((k.buildings?.houses || 2) / 2)),
+      farms: Math.max(1, Math.floor((k.buildings?.farms || 2) / 2)),
+      mines: Math.max(1, Math.floor((k.buildings?.mines || 2) / 2)),
+      markets: Math.max(1, Math.floor((k.buildings?.markets || 2) / 2)),
+      barracks: Math.max(1, Math.floor((k.buildings?.barracks || 2) / 2)),
+      walls: Math.max(1, (k.buildings?.walls || 1))
+    },
+    workers: {
+      farmer: Math.floor((k.workers?.farmer || 0) / 2),
+      lumberjack: Math.floor((k.workers?.lumberjack || 0) / 2),
+      miner: Math.floor((k.workers?.miner || 0) / 2),
+      merchant: Math.floor((k.workers?.merchant || 0) / 2),
+      soldier: 0
+    },
+    army: {
+      soldiers: halfSoldiers,
+      equipment_level: k.army?.equipment_level || 1,
+      generals: []
+    },
+    alliance: null,
+    marriage: null,
+    co_rulers: [],
+    is_unified: false,
+    last_collect: 0,
+    last_war: 0,
+    conquered_kingdoms: []
+  });
+
+  const cleanName = k.name.replace(/^Reino Unido de /i, '');
+  const parts = cleanName.split('&');
+  const name1 = parts[0]?.trim() || `Reino de @${jid1.split('@')[0]}`;
+  const name2 = parts[1]?.trim() || `Reino de @${jid2.split('@')[0]}`;
+
+  kd1.extraData.kingdom = makeIndependentK(name1);
+  delete kd1.extraData.kingdom_alliance;
+  updateUser(jid1, { extra_data: JSON.stringify(kd1.extraData) });
+
+  kd2.extraData.kingdom = makeIndependentK(name2);
+  delete kd2.extraData.kingdom_alliance;
+  updateUser(jid2, { extra_data: JSON.stringify(kd2.extraData) });
+}
 
 // Estutura e inicialização padrão dos dados do reino
 export function getKingdomData(user) {
@@ -333,7 +555,11 @@ function renderKingdomMainPanel(reply, sender, kd) {
 
   const specStr = k.specialization ? k.specialization.toUpperCase() : 'Nenhuma (Requer Nível 3)';
   const allyStr = k.alliance ? `@${k.alliance.split('@')[0]}` : 'Nenhuma';
-  const marriageStr = k.marriage ? `@${k.marriage.split('@')[0]}` : 'Solteiro(a)';
+  const rulerHeader = (k.is_unified && k.marriage)
+    ? `👑 *Monarcas Soberanos (União Real):* @${sender.split('@')[0]} & @${k.marriage.split('@')[0]}\n🏰 *Status:* 💍 *Reino Unido por Matrimônio Real*\n`
+    : `👑 *Monarca Soberano:* @${sender.split('@')[0]}\n`;
+
+  const marriageStr = k.marriage ? `@${k.marriage.split('@')[0]} (União Real 💍)` : 'Solteiro(a)';
 
   // Reset de limite diário de saque
   const now = Date.now();
@@ -349,7 +575,7 @@ function renderKingdomMainPanel(reply, sender, kd) {
   const freePopulation = Math.max(0, (k.population || 0) - allocatedWorkers);
 
   const text = `🏰 *PAINEL IMPERIAL DO REINO DE NOBREZA* 👑\n\n` +
-               `👑 *Monarca Soberano:* @${sender.split('@')[0]}\n` +
+               `${rulerHeader}` +
                `🏰 *Nome do Reino:* **${k.name}**\n` +
                `🏆 *Nível do Reino:* Nível ${k.level} (${k.xp} XP) | *Reputação:* ⭐ ${rep}\n` +
                `📜 *Especialização:* **${specStr}**\n\n` +
@@ -405,13 +631,9 @@ function handleBuyKingdom(reply, sender, user, kd, args) {
     return reply(`⚠️ Você precisa de **$${PRICE.toLocaleString('pt-BR')}** na carteira para fundar um novo Reino!`);
   }
 
-  if (!kd.hasMonarchyHouse) {
-    updateUser(sender, { wallet: user.wallet - PRICE });
-  }
-
   const newKingdom = createDefaultKingdom(kingdomName);
   kd.extraData.kingdom = newKingdom;
-  updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+  saveKingdomData(sender, kd, !kd.hasMonarchyHouse ? { wallet: user.wallet - PRICE } : {});
 
   return reply(`🎉 *REINO FUNDADO COM SUCESSO!* 👑\n\n` +
                `Vossa Majestade @${sender.split('@')[0]} declarou a fundação do **${kingdomName}**!\n\n` +
@@ -439,7 +661,7 @@ function handleRenameKingdom(reply, sender, user, kd, args) {
 
   kd.kingdom.treasury -= RENAME_COST;
   kd.kingdom.name = newName;
-  updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+  saveKingdomData(sender, kd);
 
   return reply(`👑 *REINO RENOMEADO!*\n\nSeu reino agora é oficialmente reconhecido como **${newName}**!`);
 }
@@ -509,7 +731,7 @@ function handleBuildUpgrade(reply, sender, user, kd, args) {
     k.level += 1;
   }
 
-  updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+  saveKingdomData(sender, kd);
 
   return reply(`🏗️ *CONSTRUÇÃO CONCLUÍDA!* 👑\n\n` +
                `**${bConfig.name}** foi evoluído para o **Nível ${currentLvl + 1}**!\n` +
@@ -556,7 +778,7 @@ function handleRecruitPopulation(reply, sender, user, kd, args) {
   k.population += amount;
 
   // Novos habitantes chegam como cidadãos livres para livre alocação do monarca
-  updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+  saveKingdomData(sender, kd);
 
   const w = k.workers || {};
   const allocated = (w.farmer || 0) + (w.lumberjack || 0) + (w.miner || 0) + (w.merchant || 0);
@@ -601,7 +823,7 @@ function handleManageWorkers(reply, sender, user, kd, args) {
     k.workers.merchant = baseCount;
     k.workers.soldier = 0;
 
-    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+    saveKingdomData(sender, kd);
 
     return reply(`⚖️ *TRABALHADORES REPARTIDOS COM JUSTIÇA & EQUILÍBRIO!* 👑\n\n` +
                  `Toda a população de **${pop} habitantes** foi repartida harmoniosamente entre as tarefas do reino:\n\n` +
@@ -621,7 +843,7 @@ function handleManageWorkers(reply, sender, user, kd, args) {
     k.workers.merchant = 0;
     k.workers.soldier = 0;
 
-    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+    saveKingdomData(sender, kd);
 
     return reply(`🔄 *TODOS OS TRABALHADORES FORAM DESALOCADOS!* 👑\n\n` +
                  `Agora todos os **${k.population} habitantes** estão livres para novas tarefas.\n\n` +
@@ -674,7 +896,7 @@ function handleManageWorkers(reply, sender, user, kd, args) {
     k.workers.soldier = 0;
 
     const freePop = k.population - totalBulk;
-    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+    saveKingdomData(sender, kd);
 
     return reply(`✅ *DISTRIBUIÇÃO DE TRABALHADORES ATUALIZADA!* 👑\n\n` +
                  `📊 *Nova Alocação:*\n` +
@@ -753,7 +975,7 @@ function handleManageWorkers(reply, sender, user, kd, args) {
       .reduce((sum, key) => sum + (k.workers[key] || 0), 0);
     const freePop = Math.max(0, k.population - currentAllocated);
 
-    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+    saveKingdomData(sender, kd);
 
     return reply(`✅ *TRABALHADORES REORGANIZADOS!* 👑\n\n` +
                  `Você definiu **${countParam} habitantes** como **${jobParam.toUpperCase()}**!\n\n` +
@@ -871,7 +1093,7 @@ async function handleCollectResources(reply, sender, user, kd) {
     randomEventStr = `\n\n🎲 *EVENTO ALEATÓRIO:* ${ev.text}`;
   }
 
-  updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+  saveKingdomData(sender, kd);
 
   const text = `🌾 *COLHEITA & RECOLHIMENTO IMPERIAL* 🏰\n\n` +
                `👑 *Monarca:* @${sender.split('@')[0]}\n` +
@@ -908,7 +1130,7 @@ function handleSetTax(reply, sender, user, kd, args) {
   else if (rate > 20) k.satisfaction = Math.max(30, k.satisfaction - 10);
   else if (rate <= 10) k.satisfaction = Math.min(100, k.satisfaction + 15);
 
-  updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+  saveKingdomData(sender, kd);
 
   return reply(`📜 *TAXA DE IMPOSTO REAJUSTADA!*\n\nA taxa de imposto do reino foi definida em **${rate}%**.\n😊 *Satisfação Popular:* ${k.satisfaction}%`);
 }
@@ -954,7 +1176,7 @@ function handleWithdrawTreasury(reply, sender, user, kd, args) {
   k.daily_withdrawal_today += amount;
   const newWallet = user.wallet + amount;
 
-  updateUser(sender, { wallet: newWallet, extra_data: JSON.stringify(kd.extraData) });
+  saveKingdomData(sender, kd, { wallet: newWallet });
 
   return reply(`💵 *SAQUE DIÁRIO REALIZADO COM SUCESSO!* 👑\n\n` +
                `Você retirou **$${amount.toLocaleString('pt-BR')}** do Tesouro do Reino para sua carteira pessoal!\n` +
@@ -981,7 +1203,7 @@ function handleDepositTreasury(reply, sender, user, kd, args) {
   const newWallet = user.wallet - amount;
   k.treasury += amount;
 
-  updateUser(sender, { wallet: newWallet, extra_data: JSON.stringify(kd.extraData) });
+  saveKingdomData(sender, kd, { wallet: newWallet });
 
   return reply(`🪙 *DEPÓSITO NO TESOURO REALIZADO!*\n\nVocê transferiu **$${amount.toLocaleString('pt-BR')}** da sua carteira para o cofre do reino!\n💰 *Novo Tesouro:* $${k.treasury.toLocaleString('pt-BR')}`);
 }
@@ -1018,7 +1240,7 @@ function handleSpecialization(reply, sender, user, kd, args) {
   }
 
   k.specialization = specType;
-  updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+  saveKingdomData(sender, kd);
 
   return reply(`👑 *ESPECIALIZAÇÃO DEFINIDA!*\n\nSeu reino agora é especializado na via **${SPECS[specType]}**!`);
 }
@@ -1054,7 +1276,7 @@ function handleTrainArmy(reply, sender, user, kd, args) {
   k.resources.food -= costFood;
   k.army.soldiers += amount;
 
-  updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+  saveKingdomData(sender, kd);
 
   return reply(`⚔️ *TREINAMENTO CONCLUÍDO!* 🪖\n\n` +
                `Você treinou **+${amount} soldados** para o exército real!\n` +
@@ -1082,7 +1304,7 @@ function handleUpgradeEquipment(reply, sender, user, kd, args) {
     k.resources.iron -= ironCost;
     k.army.equipment_level = currentLvl + 1;
 
-    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+    saveKingdomData(sender, kd);
 
     return reply(`🗡️ *ARMAMENTOS E EQUIPAMENTOS EVOLUÍDOS!*\n\nSeu exército agora utiliza equipamentos de **Nível ${currentLvl + 1}**! (+15 ATK/DEF por soldado)`);
   }
@@ -1124,7 +1346,7 @@ function handleGenerals(reply, sender, user, kd, args) {
     k.treasury -= gen.price;
     k.army.generals.push(gen.key);
 
-    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+    saveKingdomData(sender, kd);
 
     return reply(`🪖 *GENERAL CONTRATADO!* 🎖️\n\nO **${gen.name}** (*${gen.title}*) assumiu o comando do seu exército!\n✨ *Bônus:* ${gen.bonus}`);
   }
@@ -1197,7 +1419,7 @@ function handleResourceMarket(reply, sender, user, kd, args) {
     k.resources[resourceKey] -= rawAmount;
     k.treasury = (k.treasury || 0) + goldEarned;
 
-    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+    saveKingdomData(sender, kd);
 
     return reply(`🪙 *VENDA DE RECURSOS CONCLUÍDA!* 👑\n\n` +
                  `Você vendeu **${rawAmount} de ${rawResource.toUpperCase()}** no mercado!\n` +
@@ -1225,7 +1447,7 @@ function handleResourceMarket(reply, sender, user, kd, args) {
     k.treasury -= totalCost;
     k.resources[resourceKey] = (k.resources[resourceKey] || 0) + rawAmount;
 
-    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+    saveKingdomData(sender, kd);
 
     return reply(`🛒 *COMPRA DE RECURSOS REALIZADA COM SUCESSO!* 👑\n\n` +
                  `Você comprou **+${rawAmount} de ${rawResource.toUpperCase()}** para os armazéns reais!\n` +
@@ -1286,7 +1508,9 @@ async function handleWarCommand(sock, msg, reply, user, kd, args, sender) {
     return reply('⚠️ Marque o monarca rival contra quem deseja declarar guerra!\nExemplo: `/guerra @marcarRei`');
   }
 
-  if (targetJid === sender) return reply('⚠️ Você não pode declarar guerra contra o seu próprio reino!');
+  if (targetJid === sender || targetJid === kd.kingdom.marriage || (kd.kingdom.co_rulers && kd.kingdom.co_rulers.includes(targetJid))) {
+    return reply('⚠️ Você não pode declarar guerra contra o seu próprio reino ou cônjuge real!');
+  }
 
   if (kd.kingdom.alliance === targetJid) {
     return reply(`🤝 *PACTO DIPLOMÁTICO ATIVO!*\n\nSeu reino possui uma aliança com @${targetJid.split('@')[0]}. Rompa a aliança antes de declarar guerra.`, [targetJid]);
@@ -1358,8 +1582,8 @@ async function handleWarCommand(sock, msg, reply, user, kd, args, sender) {
 
     // Defensor perde o reino (fica zerado para refundar)
     delete targetKd.extraData.kingdom;
-    updateUser(targetJid, { extra_data: JSON.stringify(targetKd.extraData) });
-    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+    saveKingdomData(targetJid, targetKd);
+    saveKingdomData(sender, kd);
 
     const sys = 'Você é um narrador épico de guerras de impérios medievais. Escreva um relato de 25 palavras sobre a destruição total das muralhas inimigas e a conquista e anexação do reino derrotado.';
     const prompt = `O rei @${sender.split('@')[0]} conquistou totalmente o reino de @${targetJid.split('@')[0]}.`;
@@ -1387,8 +1611,8 @@ async function handleWarCommand(sock, msg, reply, user, kd, args, sender) {
     kd.kingdom.treasury += stolenGold;
     kd.kingdom.xp += 300;
 
-    updateUser(targetJid, { extra_data: JSON.stringify(targetKd.extraData) });
-    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+    saveKingdomData(targetJid, targetKd);
+    saveKingdomData(sender, kd);
 
     const sys = 'Escreva 1 relato épico de 20 palavras sobre o exército vitorioso saqueando a fortaleza inimiga. Sem aspas.';
     const prompt = `@${sender.split('@')[0]} venceu a batalha contra @${targetJid.split('@')[0]} e saqueou $${stolenGold}.`;
@@ -1411,8 +1635,8 @@ async function handleWarCommand(sock, msg, reply, user, kd, args, sender) {
     kd.kingdom.treasury -= reparations;
     targetKd.kingdom.treasury += reparations;
 
-    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
-    updateUser(targetJid, { extra_data: JSON.stringify(targetKd.extraData) });
+    saveKingdomData(sender, kd);
+    saveKingdomData(targetJid, targetKd);
 
     const sys = 'Escreva 1 relato de 20 palavras sobre as muralhas do castelo repelindo o ataque inimigo. Sem aspas.';
     const prompt = `O exército de @${sender.split('@')[0]} foi repelido pelas muralhas de @${targetJid.split('@')[0]}.`;
@@ -1447,8 +1671,8 @@ function handleAllianceCommand(reply, sender, kd, args, msg) {
     kd.kingdom.alliance = proposerJid;
     proposerKd.kingdom.alliance = sender;
 
-    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
-    updateUser(proposerJid, { extra_data: JSON.stringify(proposerKd.extraData) });
+    saveKingdomData(sender, kd);
+    saveKingdomData(proposerJid, proposerKd);
 
     allianceProposals.delete(sender);
 
@@ -1470,10 +1694,10 @@ function handleAllianceCommand(reply, sender, kd, args, msg) {
     kd.kingdom.alliance = null;
     if (allyKd && allyKd.kingdom) {
       allyKd.kingdom.alliance = null;
-      updateUser(allyJid, { extra_data: JSON.stringify(allyKd.extraData) });
+      saveKingdomData(allyJid, allyKd);
     }
 
-    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
+    saveKingdomData(sender, kd);
 
     return reply(`💔 *PACTO DIPLOMÁTICO ROMPIDO!*\n\nA aliança diplomática com o reino de @${allyJid.split('@')[0]} foi encerrada.`, [sender, allyJid]);
   }
@@ -1504,7 +1728,7 @@ function handleAllianceCommand(reply, sender, kd, args, msg) {
                `👉 Para aceitar, @${targetJid.split('@')[0]} deve digitar: \`/alianca aceitar\``, [sender, targetJid]);
 }
 
-// 19. Casamento Real
+// 19. Casamento Real & Fusão de Reinos
 function handleMarriageCommand(reply, sender, kd, args, msg) {
   if (!kd.isMonarch) return reply('⚠️ Apenas monarcas podem realizar casamentos reais.');
 
@@ -1517,17 +1741,48 @@ function handleMarriageCommand(reply, sender, kd, args, msg) {
     const proposerUser = getUser(proposerJid);
     const proposerKd = getKingdomData(proposerUser);
 
-    kd.kingdom.marriage = proposerJid;
-    proposerKd.kingdom.marriage = sender;
+    if (!proposerKd || !proposerKd.isMonarch) {
+      marriageProposals.delete(sender);
+      return reply('⚠️ O proponente não possui mais um reino ativo.');
+    }
 
-    updateUser(sender, { extra_data: JSON.stringify(kd.extraData) });
-    updateUser(proposerJid, { extra_data: JSON.stringify(proposerKd.extraData) });
+    const merged = mergeKingdoms(kd, proposerKd, sender, proposerJid);
+
+    const db = getDatabase();
+    updateDatabase((d) => {
+      d.casamentos[sender] = { parceiro: proposerJid, since: Date.now(), isRoyal: true };
+      d.casamentos[proposerJid] = { parceiro: sender, since: Date.now(), isRoyal: true };
+      delete d.pedidosCasamento[sender];
+      delete d.pedidosCasamento[proposerJid];
+    });
 
     marriageProposals.delete(sender);
 
-    return reply(`💍 *CASAMENTO REAL REALIZADO COM SUCESSO!* 👑❤️\n\n` +
-                 `Vossa Majestade @${sender.split('@')[0]} e Vossa Majestade @${proposerJid.split('@')[0]} uniram seus reinos através do matrimônio real!\n\n` +
-                 `✨ *BENEFÍCIOS DA UNIÃO:* +20% bônus permanente na arrecadação de impostos para ambos os reinos!`, [sender, proposerJid]);
+    return reply(`👑 *GRANDE UNIÃO DE REINOS & CASAMENTO REAL!* 🏰💍\n\n` +
+                 `🎉 Vossa Majestade @${sender.split('@')[0]} e Vossa Majestade @${proposerJid.split('@')[0]} uniram seus reinos e coroas no matrimônio sagrado!\n\n` +
+                 `🏰 *Novo Reino Unificado:* **${merged.name}**\n\n` +
+                 `✨ *TRANSFORMAÇÕES DA UNIÃO REAL:*\n` +
+                 `• 👑 *Soberania Conjunta:* Ambos os monarcas passam a governar o mesmo reino como Rei & Rainha!\n` +
+                 `• 💰 *Tesouros Fundidos:* Cofres, comida, madeira, pedra e ferro somados!\n` +
+                 `• ⚔️ *Força Militar Unida:* Exércitos e generais marchando sob a mesma bandeira!\n` +
+                 `• 🏰 *Edificações Integradas:* Estruturas de ambos os impérios combinadas!\n` +
+                 `• 🤝 *Comando Compartilhado:* Ambos têm acesso total para gerenciar o reino no \`/reino\`!`, [sender, proposerJid]);
+  }
+
+  if (action === 'divorcio' || action === 'desfazer') {
+    if (!kd.kingdom.marriage) return reply('⚠️ Seu reino não possui um casamento real ativo.');
+    const spouse = kd.kingdom.marriage;
+    splitKingdoms(sender, spouse);
+
+    const db = getDatabase();
+    updateDatabase((d) => {
+      delete d.casamentos[sender];
+      delete d.casamentos[spouse];
+    });
+
+    return reply(`💔 *DISSOLUÇÃO DO MATRIMÔNIO REAL E DIVISÃO DE REINOS!* 🏰\n\n` +
+                 `A união matrimonial entre @${sender.split('@')[0]} e @${spouse.split('@')[0]} foi dissolvida!\n` +
+                 `O Reino Unido foi dividido igualmente (50%) entre os dois monarcas, que agora governam seus reinos de forma independente.`, [sender, spouse]);
   }
 
   const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
@@ -1535,20 +1790,23 @@ function handleMarriageCommand(reply, sender, kd, args, msg) {
 
   if (!targetJid) {
     if (kd.kingdom.marriage) {
-      return reply(`💍 *STATUS DO SEU MATRIMÔNIO REAL*\n\nSeu reino está unido ao monarca @${kd.kingdom.marriage.split('@')[0]}!`, [kd.kingdom.marriage]);
+      return reply(`💍 *STATUS DO SEU MATRIMÔNIO REAL*\n\nSeu reino está unido ao monarca @${kd.kingdom.marriage.split('@')[0]} em uma única coroa soberana!`, [kd.kingdom.marriage]);
     }
-    return reply('⚠️ Marque outro monarca para propor casamento real!\nExemplo: `/reino casamento @marcarRei`');
+    return reply('⚠️ Marque outro monarca para propor casamento real e união de reinos!\nExemplo: `/reino casamento @marcarRei`');
   }
+
+  if (targetJid === sender) return reply('⚠️ Você não pode casar consigo mesmo.');
 
   const targetUser = getUser(targetJid);
   const targetKd = getKingdomData(targetUser);
 
-  if (!targetKd || !targetKd.isMonarch) return reply('⚠️ O usuário escolhido precisa ser um monarca!');
+  if (!targetKd || !targetKd.isMonarch) return reply('⚠️ O usuário escolhido precisa possuir um reino fundado!');
 
   marriageProposals.set(targetJid, sender);
 
-  return reply(`💍 *PROPOSTA DE CASAMENTO REAL!* ❤️\n\n` +
-               `@${sender.split('@')[0]} pediu a mão em casamento de @${targetJid.split('@')[0]}!\n\n` +
+  return reply(`💍 *PROPOSTA DE CASAMENTO REAL & UNIÃO DE REINOS!* ❤️🏰\n\n` +
+               `@${sender.split('@')[0]} (*${kd.kingdom.name}*) pediu a mão em casamento de @${targetJid.split('@')[0]} (*${targetKd.kingdom.name}*)!\n\n` +
+               `📜 *Tratado Dinástico:* Se aceito, os dois reinos se fundirão em um único grande império!\n` +
                `👉 Para aceitar, @${targetJid.split('@')[0]} deve digitar: \`/reino casamento aceitar\``, [sender, targetJid]);
 }
 

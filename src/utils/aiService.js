@@ -25,43 +25,36 @@ export async function askAiChat(messages, options = {}) {
     return text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim();
   };
 
-  // 1. Prioridade Máxima: Groq API (Qwen 3.6 27B, LLaMA 3.3 70B & LLaMA 3.1 8B)
+  // 1. Prioridade Máxima: Groq API (Exclusivamente Qwen 3.6 27B)
   if (apiKey.startsWith('gsk_')) {
-    const groqModels = ['qwen/qwen3.6-27b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
-    for (const model of groqModels) {
-      try {
-        const payload = {
-          model,
-          messages,
-          temperature: options.temperature !== undefined ? options.temperature : 0.6,
-          max_completion_tokens: options.max_tokens || 1500
-        };
+    try {
+      const payload = {
+        model: 'qwen/qwen3.6-27b',
+        messages,
+        temperature: options.temperature !== undefined ? options.temperature : 0.6,
+        max_completion_tokens: options.max_tokens || 1500,
+        reasoning_format: 'hidden'
+      };
 
-        // Para modelos Qwen / raciocínio na Groq, oculta o bloco de pensamento para economizar tokens
-        if (model.includes('qwen')) {
-          payload.reasoning_format = 'hidden';
+      const res = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        payload,
+        {
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 15000
         }
+      );
 
-        const res = await axios.post(
-          'https://api.groq.com/openai/v1/chat/completions',
-          payload,
-          {
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json'
-            },
-            timeout: 15000
-          }
-        );
-
-        let content = res.data?.choices?.[0]?.message?.content;
-        if (content && content.trim()) {
-          content = cleanThinkingTags(content);
-          if (content) return content;
-        }
-      } catch (err) {
-        console.warn(`⚠️ Groq API modelo ${model} falhou (${err.response?.data?.error?.message || err.message}). Tentando próximo modelo...`);
+      let content = res.data?.choices?.[0]?.message?.content;
+      if (content && content.trim()) {
+        content = cleanThinkingTags(content);
+        if (content) return content;
       }
+    } catch (err) {
+      console.warn(`⚠️ Groq API (Qwen 3.6 27B) falhou: ${err.response?.data?.error?.message || err.message}`);
     }
   }
 
@@ -120,40 +113,35 @@ export async function askAiChat(messages, options = {}) {
     }
   }
 
-  // 4. Fallback final via Groq Fallback Key
-  const fallbackModels = ['qwen/qwen3.6-27b', 'llama-3.3-70b-versatile'];
-  for (const model of fallbackModels) {
-    try {
-      const payload = {
-        model,
-        messages,
-        temperature: options.temperature !== undefined ? options.temperature : 0.6,
-        max_completion_tokens: options.max_tokens || 1500
-      };
-      if (model.includes('qwen')) {
-        payload.reasoning_format = 'hidden';
-      }
+  // 4. Fallback final via Groq Fallback Key (Exclusivamente Qwen 3.6 27B)
+  try {
+    const payload = {
+      model: 'qwen/qwen3.6-27b',
+      messages,
+      temperature: options.temperature !== undefined ? options.temperature : 0.6,
+      max_completion_tokens: options.max_tokens || 1500,
+      reasoning_format: 'hidden'
+    };
 
-      const res = await axios.post(
-        'https://api.groq.com/openai/v1/chat/completions',
-        payload,
-        {
-          headers: {
-            'Authorization': `Bearer ${FALLBACK_GROQ_KEY}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 15000
-        }
-      );
-
-      let content = res.data?.choices?.[0]?.message?.content;
-      if (content && content.trim()) {
-        content = cleanThinkingTags(content);
-        if (content) return content;
+    const res = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
+      payload,
+      {
+        headers: {
+          'Authorization': `Bearer ${FALLBACK_GROQ_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 15000
       }
-    } catch (err) {
-      console.warn(`⚠️ Groq Fallback modelo ${model} falhou:`, err.message);
+    );
+
+    let content = res.data?.choices?.[0]?.message?.content;
+    if (content && content.trim()) {
+      content = cleanThinkingTags(content);
+      if (content) return content;
     }
+  } catch (err) {
+    console.warn(`⚠️ Groq Fallback (Qwen 3.6 27B) falhou:`, err.message);
   }
 
   throw new Error('Não foi possível obter resposta da Inteligência Artificial no momento.');
